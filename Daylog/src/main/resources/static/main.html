@@ -2,56 +2,127 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>우리의 소중한 기록</title>
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=Parisienne&display=swap" rel="stylesheet">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>우리의 소중한 기록 — Daylog</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=Parisienne&family=Lora:ital,wght@0,400;0,500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="main.css">
+    <script src="https://cdn.jsdelivr.net/npm/exifr/dist/lite.umd.js"></script>
 </head>
 <body>
 
 <header class="navbar">
     <div class="logo">Our Memory</div>
     <div class="dday-counter">
-        <span class="heart-icon">♥</span> 우리 함께한 지 <span id="dday-count">0</span>일째
+        <span class="heart-icon">🤎</span> 우리 함께한 지 <span id="dday-count">0</span>일째
     </div>
-    <button class="logout-btn">로그아웃</button>
+    <button class="logout-btn" id="btn-logout">로그아웃</button>
 </header>
 
 <main class="container">
-    <section class="profile-section">
-        <div class="profile-box">
-            <div class="avatar user-avatar">👦</div>
-            <p class="profile-name">나</p>
-        </div>
-        <div class="center-heart">💖</div>
-        <div class="profile-box">
-            <div class="avatar gf-avatar">👧</div>
-            <p class="profile-name">여자친구</p>
+
+    <section id="tab-map" class="tab-content active">
+        <div class="map-wrapper">
+            <div id="naver-map"></div>
+
+            <div id="map-guide-banner" class="map-guide-banner hidden">
+                <span class="pulse-icon">📍</span> 지도에서 추억의 장소를 터치해주세요!
+            </div>
+
+            <div class="floating-camera-zone">
+                <input type="file" id="memory-file" accept="image/*" capture="environment" style="display: none;">
+                <button type="button" class="camera-btn" onclick="document.getElementById('memory-file').click();">
+                    📸 기록 남기기
+                </button>
+            </div>
         </div>
     </section>
 
-    <div class="content-wrapper">
+    <section id="tab-timeline" class="tab-content" style="display: none;">
+        <div class="content-wrapper">
+            <section class="timeline-section">
+                <h3 class="section-title">우리의 타임라인 📖</h3>
+                <div id="timeline-feed">
+                </div>
+            </section>
+        </div>
+    </section>
 
-        <section class="memory-form-card">
-            <h3>오늘의 추억 새기기</h3>
-            <form id="memory-form">
-                <input type="date" id="memory-date" required>
-                <input type="text" id="memory-title" placeholder="어떤 날이었나요? (예: 삼청동 데이트)" required>
-                <textarea id="memory-content" placeholder="오늘의 소중한 이야기를 적어주세요..." rows="5" required></textarea>
-                <button type="submit" class="submit-btn">기록하기 ✨</button>
-            </form>
-        </section>
-
-        <section class="timeline-section">
-            <h3>우리의 추억 타임라인</h3>
-            <div id="timeline-feed">
-
+    <section id="tab-profile" class="tab-content" style="display: none;">
+        <section class="profile-section">
+            <div class="profile-box">
+                <div class="avatar user-avatar">👦</div>
+                <p class="profile-name">나</p>
+            </div>
+            <div class="center-heart">🤎</div>
+            <div class="profile-box">
+                <div class="avatar gf-avatar">👧</div>
+                <p class="profile-name">여자친구</p>
             </div>
         </section>
-
-    </div>
+        <div class="profile-stats">
+            <p>우리가 함께 등록한 추억 수: <strong id="total-memories-count">0</strong>개</p>
+            <p class="version-text">Daylog v2.0.0</p>
+        </div>
+    </section>
 </main>
 
+<nav class="bottom-nav">
+    <a href="#" class="nav-item active" data-tab="tab-map">
+        <span class="nav-icon">🗺️</span>
+        <span class="nav-text">지도</span>
+    </a>
+    <a href="#" class="nav-item" data-tab="tab-timeline">
+        <span class="nav-icon">📖</span>
+        <span class="nav-text">타임라인</span>
+    </a>
+    <a href="#" class="nav-item" data-tab="tab-profile">
+        <span class="nav-icon">👤</span>
+        <span class="nav-text">내 정보</span>
+    </a>
+</nav>
+
+<div id="memory-modal" class="modal hidden">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>오늘의 추억 새기기 ✨</h3>
+            <button type="button" class="close-modal" onclick="closeMemoryModal()">&times;</button>
+        </div>
+        <form id="memory-form">
+            <div class="preview-zone">
+                <img id="image-preview" src="" alt="미리보기" class="hidden">
+            </div>
+            <div id="location-status-badge" class="location-badge">위치 설정 중...</div>
+
+            <div class="form-group">
+                <label>날짜</label>
+                <input type="date" id="memory-date" required>
+            </div>
+            <div class="form-group">
+                <label>제목</label>
+                <input type="text" id="memory-title" placeholder="어떤 날이었나요?" required>
+            </div>
+            <div class="form-group">
+                <label>내용</label>
+                <textarea id="memory-content" placeholder="소중한 이야기를 적어주세요..." rows="4" required></textarea>
+            </div>
+            <button type="submit" class="submit-btn">기록하기 ✨</button>
+        </form>
+    </div>
+</div>
+
+<div id="detail-modal" class="modal hidden">
+    <div class="modal-content detail-content">
+        <div class="modal-header">
+            <h3 id="detail-date" class="detail-date"></h3>
+            <button type="button" class="close-modal" onclick="closeDetailModal()">&times;</button>
+        </div>
+        <img id="detail-image" src="" alt="추억 사진" class="hidden detail-img">
+        <h2 id="detail-title" class="detail-title"></h2>
+        <p id="detail-text" class="detail-text"></p>
+    </div>
+</div>
+
+<script src="config.js?v=1.0.0"></script>
 <script src="main.js"></script>
 </body>
 </html>
