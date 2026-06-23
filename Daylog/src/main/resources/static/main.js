@@ -993,3 +993,42 @@ function escapeHtml(text) {
     return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 }
+
+// 상세 모달 창 내용을 채워주는 함수 예시
+function renderMemoryDetail(memory) {
+    // 날짜 포맷, 줄바꿈 처리 등은 기존 로직 사용
+    const dateStr = memory.date;
+    const locationStr = memory.address || "위치 정보 없음";
+
+    // 내용 줄바꿈 유지 및 XSS 방지 처리
+    const contentHtml = escapeHtml(memory.content).replace(/\n/g, '<br>');
+
+    // 이미지 태그 (이미지가 있을 때만 렌더링)
+    const imageHtml = memory.imageUrl
+        ? `<div class="detail-image-wrap"><img src="${memory.imageUrl}" alt="추억 사진"></div>`
+        : '';
+
+    const detailHtml = `
+        <div class="detail-container">
+            <!-- 헤더: 제목과 메타 정보(날짜, 위치) -->
+            <div class="detail-header">
+                <h3 class="detail-title">${escapeHtml(memory.title)}</h3>
+                <div class="detail-meta">
+                    <span class="meta-item">📅 ${dateStr}</span>
+                    <span class="meta-item">📍 ${escapeHtml(locationStr)}</span>
+                </div>
+            </div>
+
+            <!-- 사진 영역 -->
+            ${imageHtml}
+
+            <!-- 본문 영역 -->
+            <div class="detail-body">
+                <p>${contentHtml}</p>
+            </div>
+        </div>
+    `;
+
+    // 모달 내용 컨테이너(예: detailModalContent)에 주입
+    document.getElementById('detailModalContent').innerHTML = detailHtml;
+}
