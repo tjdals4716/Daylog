@@ -553,11 +553,16 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // 공통 사용자 저장 (PUT /user, 파일 선택)
+    // 공통 사용자 저장 (PUT /user). mediaData 파트는 항상 포함해
+    // 'Required part mediaData is not present' 오류를 방지 (빈 파일이면 백엔드가 기존 프로필 유지)
     function saveUser(userObj, file) {
         const fd = new FormData();
         fd.append('userData', JSON.stringify(userObj));
-        if (file) fd.append('mediaData', file);
+        if (file) {
+            fd.append('mediaData', file);
+        } else {
+            fd.append('mediaData', new Blob([], { type: 'application/octet-stream' }), 'empty');
+        }
         return fetch(`${API_BASE_URL}/user`, {
             method: 'PUT',
             headers: authHeaders(false),
@@ -611,7 +616,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const file = e.target.files[0];
             profileFileInput.value = ''; // 같은 파일 재선택 허용
             if (!file || !editingUser) return;
-            uploadProfileImage(editingUser, file);
+            const target = editingUser;
+            openCropper(file, (cropped) => uploadProfileImage(target, cropped));
         });
     }
 
@@ -675,12 +681,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const file = e.target.files[0];
         editFileInput.value = '';
         if (!file) return;
-        editPendingFile = file;
-        const reader = new FileReader();
-        reader.onload = (ev) => {
-            document.getElementById('edit-avatar').innerHTML = '<img src="' + ev.target.result + '" alt="프로필">';
-        };
-        reader.readAsDataURL(file);
+        openCropper(file, (cropped) => {
+            editPendingFile = cropped;
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                document.getElementById('edit-avatar').innerHTML = '<img src="' + ev.target.result + '" alt="프로필">';
+            };
+            reader.readAsDataURL(cropped);
+        });
     });
 
     const editForm = document.getElementById('edit-form');
@@ -781,6 +789,31 @@ document.addEventListener('DOMContentLoaded', () => {
     if (previewImg) previewImg.addEventListener('click', function () { if (this.src) openLightbox(this.src); });
     const detailImg = document.getElementById('detail-image');
     if (detailImg) detailImg.addEventListener('click', function () { if (this.src) openLightbox(this.src); });
+
+    // ===== 사진 편집(크롭/줌) 이벤트 =====
+    const cropStage = document.getElementById('crop-stage');
+    document.getElementById('crop-cancel').addEventListener('click', closeCropper);
+    document.getElementById('crop-apply').addEventListener('click', cropApply);
+    document.getElementById('crop-zoom').addEventListener('input', (e) => setCropZoom(parseFloat(e.target.value)));
+
+    cropStage.addEventListener('pointerdown', (e) => {
+        _crop.dragging = true; _crop.sx = e.clientX; _crop.sy = e.clientY;
+        _crop.bx = _crop.x; _crop.by = _crop.y;
+        try { cropStage.setPointerCapture(e.pointerId); } catch (_) {}
+    });
+    cropStage.addEventListener('pointermove', (e) => {
+        if (!_crop.dragging) return;
+        _crop.x = _crop.bx + (e.clientX - _crop.sx);
+        _crop.y = _crop.by + (e.clientY - _crop.sy);
+        applyCropTransform();
+    });
+    const endCropDrag = () => { _crop.dragging = false; };
+    cropStage.addEventListener('pointerup', endCropDrag);
+    cropStage.addEventListener('pointercancel', endCropDrag);
+    cropStage.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        setCropZoom(Math.min(3, Math.max(1, _crop.zoom + (e.deltaY < 0 ? 0.1 : -0.1))));
+    }, { passive: false });
 });
 
 // ==========================================
@@ -833,6 +866,91 @@ function daysSince(start) {
 function calculateDDay(start) {
     const el = document.getElementById('dday-count');
     if (el) el.innerText = daysSince(start);
+}
+
+// ===== 사진 편집(크롭/줌) 상태 & 제어 =====
+const _crop = { natW: 0, natH: 0, base: 1, zoom: 1, x: 0, y: 0, size: 0, onDone: null, url: null, dragging: false, sx: 0, sy: 0, bx: 0, by: 0 };
+
+function openCropper(file, onDone) {
+    const modal = document.getElementById('crop-modal');
+    const img = document.getElementById('crop-img');
+    if (!modal || !img) { if (onDone) onDone(file); return; } // 크롭 UI 없으면 원본 사용
+    _crop.onDone = onDone;
+    if (_crop.url) URL.revokeObjectURL(_crop.url);
+    _crop.url = URL.createObjectURL(file);
+
+    img.onload = () => {
+        modal.classList.remove('hidden');
+        // 모달이 보인 뒤 실제 크기 측정
+        requestAnimationFrame(() => {
+            const stage = document.getElementById('crop-stage');
+            const size = stage.getBoundingClientRect().width || 260;
+            _crop.size = size;
+            _crop.natW = img.naturalWidth;
+            _crop.natH = img.naturalHeight;
+            _crop.base = size / Math.min(img.naturalWidth, img.naturalHeight); // cover
+            _crop.zoom = 1;
+            const zoomEl = document.getElementById('crop-zoom');
+            if (zoomEl) zoomEl.value = 1;
+            const rw = _crop.natW * _crop.base, rh = _crop.natH * _crop.base;
+            _crop.x = (size - rw) / 2;
+            _crop.y = (size - rh) / 2;
+            applyCropTransform();
+        });
+    };
+    img.src = _crop.url;
+}
+
+function applyCropTransform() {
+    const img = document.getElementById('crop-img');
+    if (!img) return;
+    const s = _crop.base * _crop.zoom;
+    const rw = _crop.natW * s, rh = _crop.natH * s;
+    // 크롭 영역(정사각형)을 항상 가득 채우도록 위치 제한
+    _crop.x = Math.min(0, Math.max(_crop.size - rw, _crop.x));
+    _crop.y = Math.min(0, Math.max(_crop.size - rh, _crop.y));
+    img.style.width = rw + 'px';
+    img.style.height = rh + 'px';
+    img.style.left = _crop.x + 'px';
+    img.style.top = _crop.y + 'px';
+}
+
+function setCropZoom(newZoom) {
+    const oldS = _crop.base * _crop.zoom;
+    const newS = _crop.base * newZoom;
+    const cx = _crop.size / 2, cy = _crop.size / 2;
+    const imgX = (cx - _crop.x) / oldS, imgY = (cy - _crop.y) / oldS;
+    _crop.zoom = newZoom;
+    _crop.x = cx - imgX * newS;
+    _crop.y = cy - imgY * newS;
+    const zoomEl = document.getElementById('crop-zoom');
+    if (zoomEl) zoomEl.value = newZoom;
+    applyCropTransform();
+}
+
+function cropApply() {
+    const img = document.getElementById('crop-img');
+    const s = _crop.base * _crop.zoom;
+    const out = 512;
+    const sx = (0 - _crop.x) / s;
+    const sy = (0 - _crop.y) / s;
+    const sSize = _crop.size / s;
+    const canvas = document.createElement('canvas');
+    canvas.width = out; canvas.height = out;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, sx, sy, sSize, sSize, 0, 0, out, out);
+    canvas.toBlob((blob) => {
+        const cb = _crop.onDone;
+        closeCropper();
+        if (blob && cb) cb(new File([blob], 'profile.jpg', { type: 'image/jpeg' }));
+    }, 'image/jpeg', 0.92);
+}
+
+function closeCropper() {
+    const modal = document.getElementById('crop-modal');
+    if (modal) modal.classList.add('hidden');
+    if (_crop.url) { URL.revokeObjectURL(_crop.url); _crop.url = null; }
+    _crop.onDone = null;
 }
 
 // ===== 라이트박스 상태 & 제어 =====

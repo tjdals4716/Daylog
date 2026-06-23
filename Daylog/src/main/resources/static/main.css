@@ -517,6 +517,34 @@ button { font-family: inherit; }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
 
+/* ================= 사진 편집(크롭) 모달 ================= */
+.crop-content { padding: 22px; }
+.crop-stage {
+    position: relative; width: min(72vw, 280px); height: min(72vw, 280px);
+    margin: 6px auto 18px; overflow: hidden; border-radius: 14px;
+    background: #2e2b28; touch-action: none; cursor: grab; user-select: none;
+}
+.crop-stage:active { cursor: grabbing; }
+#crop-img { position: absolute; left: 0; top: 0; max-width: none; -webkit-user-drag: none; user-select: none; }
+.crop-ring {
+    position: absolute; inset: 0; border-radius: 50%; pointer-events: none;
+    box-shadow: 0 0 0 9999px rgba(46, 43, 40, 0.55); border: 2px solid rgba(255,255,255,0.9);
+}
+.crop-controls { display: flex; align-items: center; gap: 12px; padding: 0 4px 6px; }
+.crop-ico { font-size: 1rem; opacity: 0.6; }
+#crop-zoom {
+    flex: 1; -webkit-appearance: none; appearance: none; height: 5px; border-radius: 5px;
+    background: var(--gray-200); outline: none;
+}
+#crop-zoom::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none; width: 20px; height: 20px; border-radius: 50%;
+    background: var(--primary); cursor: pointer; box-shadow: var(--shadow-sm);
+}
+#crop-zoom::-moz-range-thumb {
+    width: 20px; height: 20px; border: none; border-radius: 50%; background: var(--primary); cursor: pointer;
+}
+.crop-hint { text-align: center; font-size: 0.78rem; color: var(--gray-400); margin-bottom: 14px; }
+
 /* ================= 반응형 (모바일 화면 맞춤) ================= */
 @media (max-width: 480px) {
     .logo { font-size: 1.2rem; }
