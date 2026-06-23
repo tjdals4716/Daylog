@@ -495,6 +495,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let meUser = null;
     let partnerUser = null;
+    let currentUser = null;
     let editingUser = null;
     const profileFileInput = document.getElementById('profile-file');
 
@@ -504,13 +505,64 @@ document.addEventListener('DOMContentLoaded', () => {
             .then(handleResponse)
             .then(users => {
                 const list = users || [];
-                meUser = list.find(isMe) || null;
-                partnerUser = list.find(u => !isMe(u)) || null;
+                console.log('[Daylog] /user/all 응답:', list);
+                // 로그인한 본인 = '나', 나머지 = '상대방' (uid 기준으로 확실히 구분)
+                meUser = list.find(u => u.uid === currentUid) || null;
+                partnerUser = list.find(u => u.uid !== currentUid) || null;
+                currentUser = meUser;
+                if (!meUser) {
+                    console.warn('[Daylog] 로그인 uid(' + currentUid + ')와 일치하는 사용자가 목록에 없습니다.');
+                }
                 renderProfileBox('me', meUser, '👦', '나');
-                renderProfileBox('partner', partnerUser, '👧', '여자친구');
+                renderProfileBox('partner', partnerUser, '👧', '상대방');
                 updateProfileStats();
+                maybePromptNickname();
             })
-            .catch(err => console.error("프로필 로드 실패:", err));
+            .catch(err => {
+                console.error("프로필 로드 실패(/user/all):", err);
+                showToast('프로필을 불러오지 못했어요: ' + (err.message || '서버 오류'));
+                loadSelfProfileFallback();
+            });
+    }
+
+    // /user/all 이 막혔을 때 최소한 본인 정보만이라도 채우는 폴백
+    function loadSelfProfileFallback() {
+        fetch(`${API_BASE_URL}/user/uid/${currentUid}`, { headers: authHeaders(true) })
+            .then(handleResponse)
+            .then(me => {
+                console.log('[Daylog] /user/uid 폴백 응답:', me);
+                if (!me) return;
+                currentUser = me;
+                meUser = me;
+                renderProfileBox('me', me, '👦', '나');
+                updateProfileStats();
+                maybePromptNickname();
+            })
+            .catch(err => console.error("본인 프로필 폴백 실패(/user/uid):", err));
+    }
+
+    // 닉네임이 없으면 최초 설정 모달 노출 (있으면 노출하지 않음)
+    function maybePromptNickname() {
+        if (!currentUser) return;
+        const nick = currentUser.nickname;
+        const modal = document.getElementById('nickname-modal');
+        if ((!nick || !String(nick).trim()) && modal.classList.contains('hidden')) {
+            document.getElementById('nickname-input').value = '';
+            modal.classList.remove('hidden');
+            setTimeout(() => { const i = document.getElementById('nickname-input'); if (i) i.focus(); }, 120);
+        }
+    }
+
+    // 공통 사용자 저장 (PUT /user, 파일 선택)
+    function saveUser(userObj, file) {
+        const fd = new FormData();
+        fd.append('userData', JSON.stringify(userObj));
+        if (file) fd.append('mediaData', file);
+        return fetch(`${API_BASE_URL}/user`, {
+            method: 'PUT',
+            headers: authHeaders(false),
+            body: fd
+        }).then(handleResponse);
     }
 
     function renderProfileBox(role, user, fallbackEmoji, relationLabel) {
@@ -521,17 +573,22 @@ document.addEventListener('DOMContentLoaded', () => {
         const wrap = document.getElementById('wrap-' + role);
         if (!avatar || !wrap) return;
 
-        // 아바타 이미지 / 기본 이모지
+        // 아바타 이미지 / 기본 이모지 (이미지 로드 실패 시 이모지로 폴백)
         if (user && user.profileURL) {
-            avatar.innerHTML = '<img src="' + user.profileURL + '" alt="프로필">';
+            avatar.innerHTML = '';
+            const img = document.createElement('img');
+            img.src = user.profileURL;
+            img.alt = '프로필';
+            img.onerror = () => { avatar.innerHTML = fallbackEmoji; };
+            avatar.appendChild(img);
         } else {
             avatar.innerHTML = fallbackEmoji;
         }
 
-        // 이름(닉네임 우선) / 관계 라벨
-        const displayName = (user && (user.nickname || user.name)) ? (user.nickname || user.name) : relationLabel;
-        nameEl.innerText = displayName;
-        subEl.innerText = relationLabel;
+        // 닉네임만 표시 (없으면 name 이 아니라 관계 라벨로)
+        const hasNick = !!(user && user.nickname && String(user.nickname).trim());
+        nameEl.innerText = hasNick ? user.nickname : relationLabel;
+        subEl.innerText = hasNick ? relationLabel : '';
 
         // 편집 권한: 백엔드는 '로그인한 본인'만 수정 가능
         const editable = !!(user && user.uid === currentUid);
@@ -561,27 +618,92 @@ document.addEventListener('DOMContentLoaded', () => {
     function uploadProfileImage(user, file) {
         if (!requireAuthOrRedirect()) return;
         showToast('프로필 사진을 올리는 중...');
-        // 백엔드가 파일 없으면 profileURL을 비우고, 보낸 필드로 덮어쓰므로
-        // 받은 user 객체(전체 필드)를 그대로 다시 보냄
-        const fd = new FormData();
-        fd.append('userData', JSON.stringify(user));
-        fd.append('mediaData', file);
-
-        fetch(`${API_BASE_URL}/user`, {
-            method: 'PUT',
-            headers: authHeaders(false),
-            body: fd
-        })
-            .then(handleResponse)
+        saveUser({ uid: user.uid, id: user.id }, file)
             .then(() => {
                 showToast('프로필 사진이 변경되었어요 🤎');
                 loadProfiles();
             })
             .catch(err => {
                 console.error(err);
-                showToast('변경에 실패했어요. 다시 시도해주세요.');
+                showToast('변경 실패: ' + (err.message || '서버 오류'));
             });
     }
+
+    // ----- 닉네임 최초 설정 -----
+    const nicknameForm = document.getElementById('nickname-form');
+    if (nicknameForm) {
+        nicknameForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const val = document.getElementById('nickname-input').value.trim();
+            if (!val) { showToast('닉네임을 입력해주세요'); return; }
+            if (!currentUser) { showToast('사용자 정보를 불러오지 못했어요'); return; }
+            const btn = nicknameForm.querySelector('.submit-btn');
+            btn.disabled = true; btn.innerText = '저장 중...';
+            const payload = { uid: currentUser.uid, id: currentUser.id, nickname: val };
+            saveUser(payload, null)
+                .then(updated => {
+                    currentUser = updated || payload;
+                    document.getElementById('nickname-modal').classList.add('hidden');
+                    showToast('닉네임이 설정되었어요 🤎');
+                    loadProfiles();
+                })
+                .catch(err => { console.error(err); showToast('설정 실패: ' + (err.message || '서버 오류')); })
+                .finally(() => { btn.disabled = false; btn.innerText = '시작하기 ✨'; });
+        });
+    }
+
+    // ----- 프로필 수정 페이지 -----
+    let editPendingFile = null;
+    const editFileInput = document.getElementById('edit-file');
+    const editPage = document.getElementById('edit-page');
+
+    function openEditPage() {
+        if (!currentUser) { showToast('사용자 정보를 불러오는 중이에요'); loadProfiles(); return; }
+        editPendingFile = null;
+        document.getElementById('edit-nickname').value = currentUser.nickname || '';
+        document.getElementById('edit-avatar').innerHTML =
+            currentUser.profileURL ? '<img src="' + currentUser.profileURL + '" alt="프로필">' : '👤';
+        editPage.classList.add('open');
+    }
+    function closeEditPage() { editPage.classList.remove('open'); }
+
+    document.getElementById('btn-edit-profile').addEventListener('click', openEditPage);
+    document.getElementById('edit-back').addEventListener('click', closeEditPage);
+    document.getElementById('edit-avatar-wrap').addEventListener('click', () => editFileInput.click());
+
+    editFileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        editFileInput.value = '';
+        if (!file) return;
+        editPendingFile = file;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            document.getElementById('edit-avatar').innerHTML = '<img src="' + ev.target.result + '" alt="프로필">';
+        };
+        reader.readAsDataURL(file);
+    });
+
+    const editForm = document.getElementById('edit-form');
+    editForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        if (!currentUser) return;
+        const nick = document.getElementById('edit-nickname').value.trim();
+        if (!nick) { showToast('닉네임을 입력해주세요'); return; }
+        const btn = editForm.querySelector('.submit-btn');
+        btn.disabled = true; btn.innerText = '저장 중...';
+        // 닉네임과 프로필 이미지만 수정 (uid/id 는 본인 식별용)
+        const payload = { uid: currentUser.uid, id: currentUser.id, nickname: nick };
+        saveUser(payload, editPendingFile)
+            .then(updated => {
+                currentUser = updated || payload;
+                editPendingFile = null;
+                showToast('프로필이 저장되었어요 🤎');
+                closeEditPage();
+                loadProfiles();
+            })
+            .catch(err => { console.error(err); showToast('저장 실패: ' + (err.message || '서버 오류')); })
+            .finally(() => { btn.disabled = false; btn.innerText = '저장하기'; });
+    });
 
     function updateProfileStats() {
         const set = (id, v) => { const el = document.getElementById(id); if (el) el.innerText = v; };
@@ -594,8 +716,8 @@ document.addEventListener('DOMContentLoaded', () => {
         // 라벨에 실제 이름 반영
         const meLabel = document.getElementById('stat-me-label');
         const pLabel = document.getElementById('stat-partner-label');
-        if (meLabel && meUser) meLabel.innerText = (meUser.nickname || meUser.name || '내') + '의 추억';
-        if (pLabel && partnerUser) pLabel.innerText = (partnerUser.nickname || partnerUser.name || '상대') + '의 추억';
+        if (meLabel && meUser) meLabel.innerText = (meUser.nickname && String(meUser.nickname).trim() ? meUser.nickname : '나') + '의 추억';
+        if (pLabel && partnerUser) pLabel.innerText = (partnerUser.nickname && String(partnerUser.nickname).trim() ? partnerUser.nickname : '상대방') + '의 추억';
     }
 
     // 첫 진입 시 프로필 로드
@@ -609,7 +731,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.target.id === 'detail-modal') closeDetailModal();
     });
     document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') { closeLightbox(); closeMemoryModal(); closeDetailModal(); }
+        if (e.key === 'Escape') { closeLightbox(); closeEditPage(); closeMemoryModal(); closeDetailModal(); }
     });
 
     // ===== 이미지 라이트박스 (확대 + 드래그) =====

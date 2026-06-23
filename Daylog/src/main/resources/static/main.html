@@ -4,6 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>우리의 소중한 기록 — Daylog</title>
+    <link rel="icon" type="image/svg+xml" href="icon.svg">
+    <link rel="apple-touch-icon" href="icon.svg">
+    <meta name="theme-color" content="#9c6644">
+    <meta name="apple-mobile-web-app-title" content="Our Memory">
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=Parisienne&family=Lora:ital,wght@0,400;0,500;0,600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="main.css">
     <script src="https://cdn.jsdelivr.net/npm/exifr/dist/lite.umd.js"></script>
@@ -13,7 +17,7 @@
 <header class="navbar">
     <div class="logo">Our Memory</div>
     <div class="dday-counter">
-        <span class="heart-icon">🤎</span> 우리 함께한 지 <span id="dday-count">0</span>일째
+        <span class="heart-icon">🤎</span> D+<span id="dday-count">0</span>일째
     </div>
     <button class="logout-btn" id="btn-logout">로그아웃</button>
 </header>
@@ -73,7 +77,7 @@
                         <span class="avatar-edit hidden" id="edit-me">📷</span>
                     </div>
                     <p class="profile-name" id="name-me">나</p>
-                    <p class="profile-sub" id="sub-me">나</p>
+                    <p class="profile-sub" id="sub-me"></p>
                 </div>
                 <div class="center-heart">🤎</div>
                 <div class="profile-box">
@@ -82,7 +86,7 @@
                         <span class="avatar-edit hidden" id="edit-partner">📷</span>
                     </div>
                     <p class="profile-name" id="name-partner">상대방</p>
-                    <p class="profile-sub" id="sub-partner">여자친구</p>
+                    <p class="profile-sub" id="sub-partner"></p>
                 </div>
             </div>
 
@@ -104,6 +108,8 @@
                     <span class="stat-label" id="stat-partner-label">상대가 남긴 추억</span>
                 </div>
             </div>
+
+            <button type="button" id="btn-edit-profile" class="edit-profile-btn">✏️ 프로필 수정</button>
 
             <p class="version-text">Daylog v2.0.0</p>
         </div>
@@ -173,6 +179,46 @@
 
 <!-- 토스트 -->
 <div id="toast" class="toast"></div>
+
+<!-- 닉네임 최초 설정 모달 (닉네임 없을 때만 노출) -->
+<div id="nickname-modal" class="modal hidden">
+    <div class="modal-content nickname-content">
+        <div class="nickname-emoji">🤎</div>
+        <h3 class="nickname-title">닉네임을 설정해주세요</h3>
+        <p class="nickname-desc">우리 추억 속에서 불릴 이름이에요.<br>언제든 프로필 수정에서 바꿀 수 있어요.</p>
+        <form id="nickname-form">
+            <div class="form-group">
+                <input type="text" id="nickname-input" placeholder="예: 성민, 자기야 💕" maxlength="20" required>
+            </div>
+            <button type="submit" class="submit-btn">시작하기 ✨</button>
+        </form>
+    </div>
+</div>
+
+<!-- 프로필 수정 페이지 -->
+<section id="edit-page" class="edit-page">
+    <header class="edit-header">
+        <button type="button" id="edit-back" class="edit-back" aria-label="뒤로">←</button>
+        <h3>프로필 수정</h3>
+        <span class="edit-header-spacer"></span>
+    </header>
+    <div class="edit-body">
+        <div class="edit-avatar-wrap" id="edit-avatar-wrap">
+            <div class="avatar" id="edit-avatar">👤</div>
+            <span class="avatar-edit">📷</span>
+        </div>
+        <p class="edit-avatar-hint">사진을 눌러 변경</p>
+
+        <form id="edit-form">
+            <div class="form-group">
+                <label>닉네임</label>
+                <input type="text" id="edit-nickname" maxlength="20" placeholder="닉네임" required>
+            </div>
+            <button type="submit" class="submit-btn">저장하기</button>
+        </form>
+    </div>
+    <input type="file" id="edit-file" accept="image/*" style="display: none;">
+</section>
 
 <!-- 이미지 라이트박스 -->
 <div id="lightbox" class="lightbox hidden">

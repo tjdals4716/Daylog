@@ -50,6 +50,8 @@ public class UserService {
     private final Storage storage;
     @Value("${google.cloud.credentials.header}")
     private String googleCouldHeader;
+    @Value("${google.cloud.storage.bucket}")
+    private String bucket;
 
     // uid 중복 확인
     public boolean isUidDuplication(String uid) {
@@ -134,53 +136,62 @@ public class UserService {
         return UserDTO.entityToDto(userEntity);
     }
 
-    // 회원 수정
+    // 회원 수정 (닉네임/프로필 등 부분 업데이트, 이미지 없으면 기존 유지)
     public UserDTO updateUser(UserDTO userDTO, MultipartFile mediaFile, UserDetails userDetails) {
-        if (!userDetails.getUsername().equals(userDTO.getUid())) {
+        if (userDetails == null || !userDetails.getUsername().equals(userDTO.getUid())) {
             throw new RuntimeException("권한이 없습니다");
         }
-        UserEntity userEntity = userRepository.findById(userDTO.getId()).orElseThrow();
-        userEntity.setName(userDTO.getName());
-        userEntity.setNickname(userDTO.getNickname());
-        userEntity.setEmail(userDTO.getEmail());
-        userEntity.setPhone(userDTO.getPhone());
-        userEntity.setAddress(userDTO.getAddress());
-        userEntity.setAge(userDTO.getAge());
-        userEntity.setGender(userDTO.getGender());
+        UserEntity userEntity = userRepository.findByUid(userDTO.getUid())
+                .orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다"));
 
-        // 프로필 이미지 변경
-        String profileURL = null;
+        // 전달된 값만 갱신 (null 이면 기존 값 유지 → 닉네임만 수정해도 다른 정보가 지워지지 않음)
+        if (userDTO.getName() != null) userEntity.setName(userDTO.getName());
+        if (userDTO.getNickname() != null) userEntity.setNickname(userDTO.getNickname());
+        if (userDTO.getEmail() != null) userEntity.setEmail(userDTO.getEmail());
+        if (userDTO.getPhone() != null) userEntity.setPhone(userDTO.getPhone());
+        if (userDTO.getAddress() != null) userEntity.setAddress(userDTO.getAddress());
+        if (userDTO.getAge() != null) userEntity.setAge(userDTO.getAge());
+        if (userDTO.getGender() != null) userEntity.setGender(userDTO.getGender());
+
+        // 새 이미지가 있을 때만 프로필 이미지 교체 (없으면 기존 프로필 유지)
         if (mediaFile != null && !mediaFile.isEmpty()) {
-            try {
-                //UUID를 사용함으로써 버킷에 저장되는 미디어 파일들이 파일 이름 중복으로 충돌이 일어나지 않음
-                UUID uuid = UUID.randomUUID();
-                String fileExtension = mediaFile.getOriginalFilename().substring(mediaFile.getOriginalFilename().lastIndexOf("."));
-                String fileName = uuid.toString() + fileExtension;
-                String contentType;
-                switch (fileExtension.toLowerCase()) {
-                    case ".jpg":
-                    case ".jpeg": contentType = "image/jpeg"; break;
-                    case ".png": contentType = "image/png"; break;
-                    case ".bmp": contentType = "image/bmp"; break;
-                    case ".gif": contentType = "image/gif"; break;
-                    case ".mp4": contentType = "video/mp4"; break;
-                    case ".avi": contentType = "video/avi"; break;
-                    case ".wmv": contentType = "video/wmv"; break;
-                    case ".mpeg:": contentType = "video/mpeg"; break;
-                    default: contentType = "application/octet-stream";
-                }
-                BlobId blobId = BlobId.of("olympick", fileName);
-                BlobInfo blobInfo = BlobInfo.newBuilder(blobId).setContentType(contentType).setContentDisposition("inline; filename=" + mediaFile.getOriginalFilename()).build();
-                storage.create(blobInfo, mediaFile.getBytes());
-                profileURL = googleCouldHeader + fileName;
-            } catch (IOException e) {
-                throw new RuntimeException("미디어 파일 업로드 중 오류가 발생했습니다.", e);
-            }
+            userEntity.setProfileURL(uploadProfileImage(mediaFile));
         }
-        userEntity.setProfileURL(profileURL);
+
         UserEntity updatedUser = userRepository.save(userEntity);
-        logger.info(userDTO.getId() + "번 사용자 정보 업데이트 완료!");
+        logger.info(userEntity.getId() + "번 사용자 정보 업데이트 완료!");
         return UserDTO.entityToDto(updatedUser);
+    }
+
+    // 프로필 이미지 GCS 업로드 (설정된 버킷 사용)
+    private String uploadProfileImage(MultipartFile mediaFile) {
+        try {
+            // UUID 로 파일명 충돌 방지
+            UUID uuid = UUID.randomUUID();
+            String original = mediaFile.getOriginalFilename();
+            String ext = (original != null && original.contains(".")) ? original.substring(original.lastIndexOf(".")) : "";
+            String fileName = uuid.toString() + ext;
+
+            String contentType;
+            switch (ext.toLowerCase()) {
+                case ".jpg":
+                case ".jpeg": contentType = "image/jpeg"; break;
+                case ".png": contentType = "image/png"; break;
+                case ".bmp": contentType = "image/bmp"; break;
+                case ".gif": contentType = "image/gif"; break;
+                case ".webp": contentType = "image/webp"; break;
+                default: contentType = "application/octet-stream";
+            }
+
+            BlobId blobId = BlobId.of(bucket, fileName);
+            BlobInfo blobInfo = BlobInfo.newBuilder(blobId)
+                    .setContentType(contentType)
+                    .build();
+            storage.create(blobInfo, mediaFile.getBytes());
+            return googleCouldHeader + fileName;
+        } catch (IOException e) {
+            throw new RuntimeException("미디어 파일 업로드 중 오류가 발생했습니다.", e);
+        }
     }
 
     // 회원 탈퇴 (삭제)

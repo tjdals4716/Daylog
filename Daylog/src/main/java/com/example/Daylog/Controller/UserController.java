@@ -64,7 +64,7 @@ public class UserController {
     @SneakyThrows
     @Operation(summary = "회원 수정")
     @PutMapping(consumes = {MediaType.APPLICATION_JSON_VALUE, MediaType.MULTIPART_FORM_DATA_VALUE})
-    public ResponseEntity<UserDTO> updateUser(@RequestPart("userData") String userData, @RequestPart(value = "mediaData") MultipartFile mediaData, @AuthenticationPrincipal UserDetails userDetails) {
+    public ResponseEntity<UserDTO> updateUser(@RequestPart("userData") String userData, @RequestPart(value = "mediaData", required = false) MultipartFile mediaData, @AuthenticationPrincipal UserDetails userDetails) {
         ObjectMapper mapper = new ObjectMapper();
         UserDTO userDTO = mapper.readValue(userData, UserDTO.class);
         return ResponseEntity.ok(userService.updateUser(userDTO, mediaData, userDetails));
