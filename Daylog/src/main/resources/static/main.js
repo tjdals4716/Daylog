@@ -117,7 +117,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- 로그아웃 ---
     document.getElementById('btn-logout').addEventListener('click', (e) => {
         e.preventDefault();
-        if (confirm('정말 로그아웃 하시겠어요?')) redirectToLogin('로그아웃 되었습니다.');
+        if (confirm('로그아웃을 진행합니다.')) redirectToLogin('로그아웃 되었습니다.');
     });
 
     // --- 탭 전환 ---
@@ -150,10 +150,10 @@ document.addEventListener('DOMContentLoaded', () => {
         script.src = 'https://openapi.map.naver.com/openapi/v3/maps.js?submodules=geocoder&ncpKeyId=' + window.APP_CONFIG.NAVER_MAP_CLIENT_ID;
         script.async = true;
         script.onload = () => initMap();
-        script.onerror = () => showMapFallback('지도를 불러오지 못했어요. 네트워크나 키 설정을 확인해주세요.');
+        script.onerror = () => showMapFallback('지도 조회 실패. 네트워크나 키 설정을 확인해주세요.');
         document.head.appendChild(script);
     } else {
-        showMapFallback('지도 키가 설정되지 않았어요. config.js의 NAVER_MAP_CLIENT_ID를 확인해주세요.');
+        showMapFallback('지도 키가 설정되지 않음. config.js의 NAVER_MAP_CLIENT_ID를 확인해주세요.');
     }
 
     function showMapFallback(msg) {
@@ -238,7 +238,7 @@ document.addEventListener('DOMContentLoaded', () => {
         exitPickMode();
         selectedFile = null;
         if (fileInput) fileInput.value = '';
-        showToast('위치 선택을 취소했어요');
+        showToast('위치 선택을 취소함');
     });
 
     // --- 주소/장소 검색 + 연관 검색어 ---
@@ -258,7 +258,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function setLocationFromItem(item) {
         const lat = parseFloat(item.y);
         const lng = parseFloat(item.x);
-        if (isNaN(lat) || isNaN(lng)) { showToast('좌표를 찾지 못했어요'); return; }
+        if (isNaN(lat) || isNaN(lng)) { showToast('좌표 조회 실패'); return; }
         currentLatLng = { lat: lat, lng: lng };
 
         // 모달 뒤로 위치가 보이도록 지도 이동
@@ -294,7 +294,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function showEmptySuggestion() {
         if (!suggestBox) return;
-        suggestBox.innerHTML = '<li class="sg-empty">검색 결과가 없어요</li>';
+        suggestBox.innerHTML = '<li class="sg-empty">검색 결과가 없음</li>';
         suggestBox.classList.remove('hidden');
         lastSuggestions = [];
     }
@@ -315,12 +315,12 @@ document.addEventListener('DOMContentLoaded', () => {
     function runSearch() {
         const query = (searchInput.value || '').trim();
         if (!query) { showToast('검색할 주소를 입력해주세요'); return; }
-        if (!map || !(window.naver && naver.maps.Service)) { showToast('지도가 아직 준비되지 않았어요'); return; }
+        if (!map || !(window.naver && naver.maps.Service)) { showToast('지도가 아직 준비되지 않음'); return; }
         if (lastSuggestions.length > 0) { setLocationFromItem(lastSuggestions[0]); return; }
         naver.maps.Service.geocode({ query: query }, (status, response) => {
-            if (status !== naver.maps.Service.Status.OK) { showToast('주소 검색에 실패했어요'); return; }
+            if (status !== naver.maps.Service.Status.OK) { showToast('주소 검색에 실패함'); return; }
             const addresses = response.v2 && response.v2.addresses;
-            if (!addresses || addresses.length === 0) { showToast('검색 결과가 없어요. 다른 키워드로 시도해보세요.'); return; }
+            if (!addresses || addresses.length === 0) { showToast('검색 결과가 없음. 다른 키워드로 시도해보세요.'); return; }
             setLocationFromItem(addresses[0]);
         });
     }
@@ -356,7 +356,7 @@ document.addEventListener('DOMContentLoaded', () => {
             reader.readAsDataURL(file);
 
             if (!map) {
-                showToast('지도가 아직 준비되지 않았어요');
+                showToast('지도가 아직 준비되지 않음');
                 return;
             }
 
@@ -374,7 +374,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     enterPickMode();
                 }
             } catch (error) {
-                showToast('사진 분석에 실패했어요. 지도에서 위치를 골라주세요.');
+                showToast('사진 분석 실패. 지도에서 위치를 골라주세요.');
                 enterPickMode();
             }
         });
@@ -413,12 +413,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 .then(handleResponse)
                 .then(() => {
                     closeMemoryModal();
-                    showToast('소중한 기억이 기록되었어요 🤎');
+                    showToast('기록 성공');
                     loadMemoriesFromServer();
                 })
                 .catch(err => {
                     console.error(err);
-                    showToast('기록에 실패했어요. 다시 시도해주세요.');
+                    showToast('기록 실패. 다시 시도해주세요.');
                 })
                 .finally(() => {
                     submitBtn.disabled = false;
@@ -443,7 +443,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (memoryList.length === 0) {
                     timelineFeed.innerHTML =
                         '<div class="empty-state"><span class="es-icon">🤎</span>' +
-                        '<p>아직 기록된 추억이 없어요.<br>지도 탭에서 첫 추억을 남겨보세요!</p></div>';
+                        '<p>기록된 것이 존재하지 않음.<br>지도에서 첫 추억을 남겨보세요.</p></div>';
                     return;
                 }
 
@@ -520,7 +520,7 @@ document.addEventListener('DOMContentLoaded', () => {
             })
             .catch(err => {
                 console.error("프로필 로드 실패(/user/all):", err);
-                showToast('프로필을 불러오지 못했어요: ' + (err.message || '서버 오류'));
+                showToast('프로필 조회 실패: ' + (err.message || '서버 오류'));
                 loadSelfProfileFallback();
             });
     }
@@ -626,7 +626,7 @@ document.addEventListener('DOMContentLoaded', () => {
         showToast('프로필 사진을 올리는 중...');
         saveUser({ uid: user.uid, id: user.id }, file)
             .then(() => {
-                showToast('프로필 사진이 변경되었어요 🤎');
+                showToast('프로필 사진이 변경 완료');
                 loadProfiles();
             })
             .catch(err => {
@@ -642,7 +642,7 @@ document.addEventListener('DOMContentLoaded', () => {
             e.preventDefault();
             const val = document.getElementById('nickname-input').value.trim();
             if (!val) { showToast('닉네임을 입력해주세요'); return; }
-            if (!currentUser) { showToast('사용자 정보를 불러오지 못했어요'); return; }
+            if (!currentUser) { showToast('사용자 정보 조회 실패'); return; }
             const btn = nicknameForm.querySelector('.submit-btn');
             btn.disabled = true; btn.innerText = '저장 중...';
             const payload = { uid: currentUser.uid, id: currentUser.id, nickname: val };
@@ -650,7 +650,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 .then(updated => {
                     currentUser = updated || payload;
                     document.getElementById('nickname-modal').classList.add('hidden');
-                    showToast('닉네임이 설정되었어요 🤎');
+                    showToast('닉네임이 설정 완료');
                     loadProfiles();
                 })
                 .catch(err => { console.error(err); showToast('설정 실패: ' + (err.message || '서버 오류')); })
@@ -705,7 +705,7 @@ document.addEventListener('DOMContentLoaded', () => {
             .then(updated => {
                 currentUser = updated || payload;
                 editPendingFile = null;
-                showToast('프로필이 저장되었어요 🤎');
+                showToast('프로필 저장 완료');
                 closeEditPage();
                 loadProfiles();
             })
