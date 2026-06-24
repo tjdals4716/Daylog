@@ -50,6 +50,10 @@ public class MemoryEntity {
 
     @PrePersist
     public void prePersist() {
-        this.createdAt = LocalDateTime.now();
+        // createdAt 이 지정되지 않았을 때(예: 메타데이터 없음)만 현재 시각으로 채움.
+        // 사진 촬영일(메타데이터) 등으로 값이 들어온 경우엔 그 값을 그대로 사용.
+        if (this.createdAt == null) {
+            this.createdAt = LocalDateTime.now();
+        }
     }
 }

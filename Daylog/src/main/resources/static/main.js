@@ -199,6 +199,21 @@ function reverseGeocode(lat, lng, cb) {
     });
 }
 
+// 전체 주소를 큰 영역(시/도 + 시·군·구)과 상세 주소로 분리
+//  예) '경기도 수원시 영통구 법조로 25 광교 SK VIEW Lake'
+//      → placeName: '경기도 수원시', address: '영통구 법조로 25 광교 SK VIEW Lake'
+//  예) '서울특별시 강남구 테헤란로 123' → placeName: '서울특별시 강남구', address: '테헤란로 123'
+function splitKoreanAddress(full) {
+    const s = String(full || '').trim();
+    if (!s) return { placeName: '', address: '' };
+    const parts = s.split(/\s+/);
+    if (parts.length <= 2) return { placeName: parts.join(' '), address: '' };
+    return {
+        placeName: parts.slice(0, 2).join(' '),
+        address: parts.slice(2).join(' ')
+    };
+}
+
 function sortByDateDesc(a, b) { return new Date(b.createdAt) - new Date(a.createdAt); }
 
 // ==========================================
@@ -231,6 +246,35 @@ document.addEventListener('DOMContentLoaded', () => {
     Daylog.authHeaders = authHeaders;
     Daylog.handleResponse = handleResponse;
     Daylog.reload = () => loadMemoriesFromServer();
+
+    // 해당 마커를 잠깐 빠르게 흔들어 "여기예요" 표시
+    function shakeMarker(memory) {
+        if (!memory) return;
+        const m = markers.find(mk => mk._memoryId === memory.id);
+        if (!m || typeof m.getElement !== 'function') return;
+        const el = m.getElement();
+        if (!el) return;
+        const target = el.querySelector('.custom-marker') || el.querySelector('.marker-heart') || el.firstElementChild || el;
+        target.classList.remove('marker-shake');
+        void target.offsetWidth; // 애니메이션 재시작을 위한 리플로우
+        target.classList.add('marker-shake');
+        setTimeout(() => target.classList.remove('marker-shake'), 900);
+    }
+
+    // 상세보기에서 위치 클릭 → '지도' 탭으로 이동 후 해당 위치로 이동 + 마커 흔들기
+    Daylog.focusOnMap = function (memory) {
+        if (!memory || memory.lat == null || memory.lng == null) return;
+        closeDetailModal();
+        const mapNav = document.querySelector('.nav-item[data-tab="tab-map"]');
+        if (mapNav) mapNav.click(); // 탭 전환 + map resize 트리거
+        setTimeout(() => {
+            if (!map) return;
+            map.setZoom(16);
+            map.panTo(new naver.maps.LatLng(memory.lat, memory.lng));
+            // 이동/리렌더가 끝난 뒤 흔들기
+            setTimeout(() => shakeMarker(memory), 420);
+        }, 80);
+    };
 
     const mapWrapper = document.getElementById('map-wrapper');
     const locationMode = document.getElementById('location-mode');
@@ -381,7 +425,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             const r = response.v2;
             const addr = (r && r.address) ? (r.address.roadAddress || r.address.jibunAddress) : '';
-            currentLocationMeta = { placeName: '', address: addr || '' };
+            currentLocationMeta = splitKoreanAddress(addr);
             setBadgeManual(tag + ' ' + (addr || '지정한 위치로 설정되었습니다'));
         });
     }
@@ -476,13 +520,11 @@ document.addEventListener('DOMContentLoaded', () => {
         map.setZoom(16);
 
         const addr = item.roadAddress || item.jibunAddress || '';
-        // 사용자가 입력한 검색어(예: "노들섬")를 장소 이름으로 저장 → 그대로 표시됨
-        const typed = (searchInput.value || '').trim();
-        const placeName = typed || addr;
-        currentLocationMeta = { placeName: placeName, address: addr };
+        // 큰 영역(시/도 + 시·군·구)과 상세 주소로 분리해 저장
+        currentLocationMeta = splitKoreanAddress(addr);
 
         const badge = document.getElementById('location-status-badge');
-        badge.innerText = "🔍 '" + (placeName || addr) + "' 위치로 설정되었습니다";
+        badge.innerText = "🔍 '" + (addr || '검색 위치') + "' 위치로 설정되었습니다";
         badge.className = "location-badge manual";
 
         hideSuggestions();
@@ -605,7 +647,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 badge.innerText = "📍 사진 위치가 자동으로 설정되었습니다!";
                 badge.className = "location-badge success";
                 reverseGeocode(gps.latitude, gps.longitude, (addr) => {
-                    currentLocationMeta = { placeName: '', address: addr || '' };
+                    currentLocationMeta = splitKoreanAddress(addr);
                     if (addr) badge.innerText = "📍 " + addr;
                 });
                 openMemoryModal();
@@ -618,7 +660,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     currentLocationMeta = { placeName: '', address: '' };
                     if (badge) { badge.innerText = '📍 현재 위치로 설정되었습니다!'; badge.className = 'location-badge success'; }
                     reverseGeocode(currentLatLng.lat, currentLatLng.lng, (addr) => {
-                        currentLocationMeta = { placeName: '', address: addr || '' };
+                        currentLocationMeta = splitKoreanAddress(addr);
                         if (addr && badge) badge.innerText = '📍 ' + addr;
                     });
                     openMemoryModal();
@@ -657,6 +699,7 @@ document.addEventListener('DOMContentLoaded', () => {
             submitBtn.disabled = true;
             submitBtn.innerText = '기록하는 중...';
 
+            const _dateVal = document.getElementById('memory-date').value;
             const memoryDTO = {
                 title: document.getElementById('memory-title').value,
                 content: document.getElementById('memory-content').value,
@@ -664,7 +707,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 lng: currentLatLng.lng,
                 placeName: (currentLocationMeta && currentLocationMeta.placeName) || '',
                 address: (currentLocationMeta && currentLocationMeta.address) || '',
-                createdAt: new Date(document.getElementById('memory-date').value).toISOString()
+                // 날짜 input(yyyy-MM-dd)을 'Z' 없는 로컬 날짜시각으로 전송 → 서버가 그대로 저장(현재 날짜로 덮어쓰지 않음)
+                createdAt: _dateVal ? (_dateVal + 'T00:00:00') : null
             };
 
             const formData = new FormData();
@@ -801,7 +845,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     currentLocationMeta = { placeName: '', address: '' };
                     if (badge) { badge.innerText = '📍 현재 위치로 설정되었습니다!'; badge.className = 'location-badge success'; }
                     reverseGeocode(currentLatLng.lat, currentLatLng.lng, (addr) => {
-                        currentLocationMeta = { placeName: '', address: addr || '' };
+                        currentLocationMeta = splitKoreanAddress(addr);
                         if (addr && badge) badge.innerText = '📍 ' + addr;
                     });
                 }, (err) => {
@@ -870,19 +914,21 @@ document.addEventListener('DOMContentLoaded', () => {
         ptrFg.style.strokeDashoffset = PTR_C * (1 - Math.max(0, Math.min(1, p)));
     }
 
-    function attachPullToRefresh(scrollEl, isEnabled, onRefresh, iconInset) {
+    function attachPullToRefresh(scrollEl, isEnabled, onRefresh, iconInset, lockContent) {
         if (!scrollEl) return;
         const inset = (typeof iconInset === 'number') ? iconInset : 12;
         let startY = 0, pulling = false, dist = 0, busy = false, baseTop = 0;
 
         function setVisual(d, instant) {
             const t = instant ? 'none' : 'transform 0.32s var(--ease-soft)';
-            scrollEl.style.transition = t;
             ptrIndicator.style.transition = instant ? 'none' : 'transform 0.32s var(--ease-soft), opacity 0.3s ease';
-            // 콘텐츠는 당긴 만큼 제한 없이 따라 내려옴
-            scrollEl.style.transform = d > 0 ? ('translateY(' + d + 'px)') : '';
-            // 아이콘은 콘텐츠(폼/타임라인)의 위쪽 안쪽에서 함께 따라 내려옴
-            const follow = Math.min(d, 120);
+            // 콘텐츠 고정 모드(lockContent)면 폼/내용은 전혀 움직이지 않고 링만 표시
+            if (!lockContent) {
+                scrollEl.style.transition = t;
+                scrollEl.style.transform = d > 0 ? ('translateY(' + d + 'px)') : '';
+            }
+            // 아이콘(링)은 당긴 만큼 함께 따라 내려옴 (콘텐츠 고정 시에는 이동 폭 축소)
+            const follow = Math.min(d, lockContent ? 56 : 120);
             ptrIndicator.style.transform = 'translateX(-50%) translateY(' + (baseTop + follow + inset) + 'px)';
             ptrIndicator.style.opacity = d > 4 ? Math.min(d / 30, 1) : 0;
             if (!ptrIndicator.classList.contains('spinning')) {
@@ -917,10 +963,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 // 게이지가 다 찼을 때 놓으면 → 새로고침 (스피너 회전)
                 busy = true;
                 ptrSetProgress(1);
-                scrollEl.style.transition = 'transform 0.32s var(--ease-soft)';
+                if (!lockContent) {
+                    scrollEl.style.transition = 'transform 0.32s var(--ease-soft)';
+                    scrollEl.style.transform = 'translateY(58px)';
+                }
                 ptrIndicator.style.transition = 'transform 0.32s var(--ease-soft)';
-                scrollEl.style.transform = 'translateY(58px)';
-                ptrIndicator.style.transform = 'translateX(-50%) translateY(' + (baseTop + 50 + inset) + 'px)';
+                ptrIndicator.style.transform = 'translateX(-50%) translateY(' + (baseTop + (lockContent ? 40 : 50) + inset) + 'px)';
                 ptrIndicator.style.opacity = 1;
                 ptrIndicator.classList.add('spinning');
                 // 회전 인디케이터용 짧은 호(arc)로 전환
@@ -959,12 +1007,12 @@ document.addEventListener('DOMContentLoaded', () => {
             return Promise.resolve(loadMemoriesFromServer()).then(() => showToast('새로고침했어요'));
         }, 26); // 타임라인/내정보 아이콘을 좀 더 아래로
 
-    // 추억 상세 모달 당겨서 새로고침 (아이콘이 폼 내부에 표시되도록 inset 적용)
+    // 추억 상세 모달 당겨서 새로고침 — 폼은 고정(움직이지 않음), 링만 위쪽에 표시
     const detailScroll = document.querySelector('#detail-modal .modal-content');
     attachPullToRefresh(detailScroll,
         () => !document.getElementById('detail-modal').classList.contains('hidden') && _detailMemory != null,
         () => { if (_detailMemory) loadComments(_detailMemory.id); return Promise.resolve(loadMemoriesFromServer()).then(() => showToast('새로고침했어요')); },
-        14);
+        -10, true);
 
     // '우리의 추억' / '~의 추억' 리스트 모달 당겨서 새로고침 (가로 드래그는 CSS로 잠금)
     const listScroll = document.querySelector('#list-modal .list-modal-body');
@@ -1014,6 +1062,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 map: map,
                 icon: { content: markerHtml, anchor: new naver.maps.Point(24, 24) }
             });
+            marker._memoryId = memory.id; // 상세보기 → 지도 포커스/흔들기용
             naver.maps.Event.addListener(marker, 'click', () => openDetailModal(memory));
             markers.push(marker);
         });
@@ -1060,8 +1109,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     '<h4 class="tl-title">' + escapeHtml(memory.title || '') + '</h4>' +
                     '<p class="tl-text">' + escapeHtml(memory.content || '') + '</p>' +
                     '<div class="tl-loc">' +
+                    '<div class="tl-loc-row">' +
                     '<span class="tl-loc-icon">📍</span>' +
                     '<span class="tl-place"></span>' +
+                    '</div>' +
                     '<span class="tl-addr"></span>' +
                     '</div>' +
                     '</div>' +
@@ -1603,7 +1654,7 @@ function openDetailModal(memory) {
         authorHtml +
         '<div class="detail-meta">' +
         '<span class="meta-item">📅 ' + escapeHtml(dateStr) + '</span>' +
-        '<span class="meta-item" id="detail-loc">📍 위치 확인 중…</span>' +
+        '<span class="meta-item meta-loc-clickable" id="detail-loc" title="지도에서 보기">📍 위치 확인 중…</span>' +
         '</div>' +
         '</div>' +
         imageHtml +
@@ -1629,6 +1680,14 @@ function openDetailModal(memory) {
     }
 
     applyDetailLocation(memory);
+
+    // 위치 클릭 → 지도 탭으로 이동 + 해당 마커 흔들기
+    const locEl = document.getElementById('detail-loc');
+    if (locEl && memory.lat != null && memory.lng != null) {
+        locEl.addEventListener('click', () => {
+            if (Daylog && typeof Daylog.focusOnMap === 'function') Daylog.focusOnMap(memory);
+        });
+    }
 
     const di = document.getElementById('detail-image');
     if (di) di.addEventListener('click', () => { if (di.src) openLightbox(di.src, di); });
@@ -1656,13 +1715,15 @@ function openDetailModal(memory) {
     document.getElementById('detail-modal').classList.remove('hidden');
 }
 
-// 상세 모달의 위치 표기 (장소명 · 상세주소) — 없으면 좌표로 역지오코딩
-function applyDetailLocation(memory) {
-    const el = document.getElementById('detail-loc');
+// 상세/수정 모달의 위치 표기 (장소명 + 상세주소) — 없으면 좌표로 역지오코딩
+//  elId: 채워 넣을 요소 id ('detail-loc' 또는 'edit-loc')
+function fillLocationInto(elId, memory) {
+    const el = document.getElementById(elId);
     if (!el) return;
     const place = (memory.placeName || '').trim();
     const addr = (memory.address || '').trim();
-    const compose = (p, a) => '📍 ' + [p, a].filter(Boolean).join(' · ');
+    // 기존과 동일하게 한 줄 주소처럼 보이도록 공백으로 합침
+    const compose = (p, a) => '📍 ' + [p, a].filter(Boolean).join(' ');
     if (place || addr) el.textContent = compose(place, addr);
     if (!place && !addr) {
         if (memory.lat != null && memory.lng != null) {
@@ -1673,10 +1734,28 @@ function applyDetailLocation(memory) {
     }
 }
 
+function applyDetailLocation(memory) { fillLocationInto('detail-loc', memory); }
+
 function enterDetailEdit(memory) {
     const view = document.getElementById('detail-view');
     const editForm = document.getElementById('detail-edit-form');
     if (!editForm) return;
+
+    // 사진 표시 (수정 불가)
+    const imgWrap = document.getElementById('edit-image-wrap');
+    const img = document.getElementById('edit-image');
+    if (imgWrap && img) {
+        if (memory.mediaURL) {
+            img.src = memory.mediaURL;
+            imgWrap.classList.remove('hidden');
+        } else {
+            img.removeAttribute('src');
+            imgWrap.classList.add('hidden');
+        }
+    }
+    // 위치 표시 (수정 불가)
+    fillLocationInto('edit-loc', memory);
+
     document.getElementById('edit-memory-date').value = memory.createdAt ? memory.createdAt.substring(0, 10) : '';
     document.getElementById('edit-memory-title').value = memory.title || '';
     document.getElementById('edit-memory-content').value = memory.content || '';
@@ -2090,12 +2169,17 @@ function applyCardLocation(scope, memory) {
         if (memory.lat != null && memory.lng != null) {
             placeEl.textContent = '위치 확인 중…';
             reverseGeocode(memory.lat, memory.lng, (a) => {
-                if (a) { placeEl.textContent = areaOf(a); addrEl.textContent = a; }
-                else placeEl.textContent = '위치 정보 없음';
+                if (a) {
+                    const sp = splitKoreanAddress(a);
+                    placeEl.textContent = sp.placeName;
+                    addrEl.textContent = sp.address;
+                } else placeEl.textContent = '위치 정보 없음';
             });
         } else { placeEl.textContent = '위치 정보 없음'; }
     } else if (place && !addr && memory.lat != null && memory.lng != null) {
-        reverseGeocode(memory.lat, memory.lng, (a) => { if (a) addrEl.textContent = a; });
+        reverseGeocode(memory.lat, memory.lng, (a) => {
+            if (a) { const sp = splitKoreanAddress(a); if (sp.address) addrEl.textContent = sp.address; }
+        });
     }
 }
 function areaOf(addr) { return String(addr || '').split(' ').slice(0, 2).join(' '); }

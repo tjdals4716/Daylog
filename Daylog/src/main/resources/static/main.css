@@ -560,6 +560,23 @@ input[type="date"]::-webkit-date-and-time-value {
     100% { opacity: 1; transform: translateY(0) scale(1); }
 }
 
+/* ---- 상세보기에서 위치 클릭 시: 해당 마커를 잠깐 빠르게 흔들기 ---- */
+@keyframes markerShake {
+    0%, 100% { transform: translateX(0) rotate(0deg); }
+    12%      { transform: translateX(-5px) rotate(-7deg); }
+    24%      { transform: translateX(5px)  rotate(7deg); }
+    38%      { transform: translateX(-4px) rotate(-5deg); }
+    52%      { transform: translateX(4px)  rotate(5deg); }
+    66%      { transform: translateX(-3px) rotate(-3deg); }
+    80%      { transform: translateX(2px)  rotate(2deg); }
+}
+.custom-marker.marker-shake,
+.marker-heart.marker-shake {
+    animation: markerShake 0.6s ease-in-out;
+    transform-origin: center bottom;
+    z-index: 30;
+}
+
 /* ================= 토스트 ================= */
 .toast {
     position: fixed; bottom: calc(var(--bottom-nav-height) + 18px); left: 50%;
@@ -724,6 +741,19 @@ input[type="date"]::-webkit-date-and-time-value {
 .detail-edit-note { font-size: 0.8rem; color: var(--gray-500); margin: 2px 0 14px; }
 .detail-edit-actions { display: flex; gap: 10px; }
 .detail-edit-actions .submit-btn { flex: 1; margin-top: 0; }
+
+/* ---- 수정 모달: 사진/위치 표시 전용(수정 불가) ---- */
+.detail-edit-readonly { display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; }
+.detail-image-wrap.edit-locked { cursor: default; }
+.edit-loc-line {
+    align-self: flex-start; max-width: 100%;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* ---- 상세보기 위치(클릭 시 지도로 이동) ---- */
+.meta-loc-clickable { cursor: pointer; transition: background 0.18s ease, color 0.18s ease; }
+.meta-loc-clickable:hover { background: var(--primary-light); color: var(--primary-dark); }
+.meta-loc-clickable:active { transform: scale(0.97); }
 .cancel-edit-btn {
     flex: 0 0 86px; background: var(--gray-100); color: var(--gray-600);
     border: 1px solid var(--gray-200); border-radius: 12px;
@@ -772,14 +802,19 @@ input[type="date"]::-webkit-date-and-time-value {
     display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
 .tl-loc {
-    display: flex; align-items: baseline; gap: 5px; flex-wrap: wrap;
+    display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
     margin-top: auto; padding-top: 4px;
 }
+.tl-loc-row { display: flex; align-items: center; gap: 5px; max-width: 100%; }
 .tl-loc-icon { font-size: 0.78rem; flex-shrink: 0; }
-.tl-place { font-size: 0.8rem; font-weight: 600; color: var(--primary-dark); }
+.tl-place {
+    font-size: 0.8rem; font-weight: 600; color: var(--primary-dark);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .tl-addr {
     font-size: 0.76rem; color: var(--gray-500);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%;
+    padding-left: 19px; /* 📍 아이콘 폭만큼 들여써서 그 밑에 정렬 */
 }
 .tl-thumb {
     flex: 0 0 84px; width: 84px; align-self: stretch; min-height: 84px;

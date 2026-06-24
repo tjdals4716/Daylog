@@ -56,6 +56,7 @@ public class MemoryDTO {
                 .mediaURL(mediaURL)
                 .owner(owner)
                 .deleted(deleted)
+                .createdAt(createdAt) // 메타데이터(촬영일) 등으로 전달된 날짜 유지
                 .build();
     }
 }
