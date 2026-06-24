@@ -703,6 +703,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const camFallback = document.getElementById('camera-fallback-file');
     let camStream = null;
     let camFacing = 'environment';
+    let cameraReturnToForm = false; // 다시 촬영 중 X 누르면 이전 사진 폼으로 복귀
 
     async function startCameraStream() {
         stopCameraStream();
@@ -734,7 +735,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (camVideo) camVideo.srcObject = null;
     }
 
-    function openCameraCapture() {
+    function openCameraCapture(returnToForm) {
+        cameraReturnToForm = !!returnToForm;
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
             if (camFallback) camFallback.click();
             return;
@@ -748,6 +750,11 @@ document.addEventListener('DOMContentLoaded', () => {
     function closeCameraModal() {
         stopCameraStream();
         if (camModal) camModal.classList.add('hidden');
+        // 다시 촬영 중 촬영하지 않고 닫으면 → 이전 사진으로 작성 폼 복귀 (초기화 X)
+        if (cameraReturnToForm) {
+            cameraReturnToForm = false;
+            if (selectedFile) openMemoryModal();
+        }
     }
 
     // 촬영 → 위치(현재 GPS)·날짜(오늘) 자동 설정 → 작성 폼 오픈
@@ -769,6 +776,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const file = new File([blob], 'camera_' + Date.now() + '.jpg', { type: 'image/jpeg' });
             selectedFile = file;
             cameraMode = true;
+            cameraReturnToForm = false; // 촬영 성공 → 닫기 복귀 로직 비활성화
             closeCameraModal();
 
             // 미리보기
@@ -836,7 +844,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 다시 촬영하기 → 카메라 재실행 (작성 중 데이터 유지)
     const retakeBtn = document.getElementById('btn-retake-photo');
-    if (retakeBtn) retakeBtn.addEventListener('click', () => { openCameraCapture(); });
+    if (retakeBtn) retakeBtn.addEventListener('click', () => { openCameraCapture(true); });
 
     // ==========================================
     //  당겨서 새로고침 (Pull to refresh) — 콘텐츠가 손가락을 따라 내려오는 방식
