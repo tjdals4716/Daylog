@@ -178,6 +178,25 @@ const Daylog = {
     handleResponse: async function (r) { return r; }
 };
 
+// 가볼곳(체크리스트) 타입 메타 — 라벨/이모지/색상을 한 곳에서 관리
+const CHECKLIST_TYPES = {
+    CAFE: { label: '카페',  emoji: '☕', color: '#b06a4f' },
+    FOOD: { label: '식당',  emoji: '🍴', color: '#c0563f' },
+    SPOT: { label: '명소',  emoji: '📍', color: '#3f7fb0' },
+    ETC:  { label: '기타',  emoji: '✨', color: '#7a756e' }
+};
+function checklistType(t) { return CHECKLIST_TYPES[t] || CHECKLIST_TYPES.ETC; }
+function fmtDate(s) { return s ? String(s).substring(0, 10).replace(/-/g, '.') : ''; }
+
+// 카드 썸네일 HTML — 이미지가 있으면 배경이미지, 없으면 같은 크기의 '이미지 없음' 자리표시
+function thumbHtml(mediaURL, cls) {
+    const c = cls || 'tl-thumb';
+    if (mediaURL) {
+        return '<div class="' + c + '" style="background-image:url(\'' + mediaURL + '\')"></div>';
+    }
+    return '<div class="' + c + ' thumb-empty"><span class="thumb-empty-icon">🖼️</span><span class="thumb-empty-text">이미지 없음</span></div>';
+}
+
 // 좌표 → 주소 역지오코딩 (캐시 사용)
 const _geoCache = {};
 function reverseGeocode(lat, lng, cb) {
@@ -237,6 +256,13 @@ document.addEventListener('DOMContentLoaded', () => {
     let markers = []; // 지도 마커 인스턴스 보관 (중복 생성 방지)
     let cameraMode = false;        // 라이브 카메라로 촬영한 추억인지
     let pickReturnsToForm = false; // 위치 재설정 후 작성 폼으로 복귀(데이터 유지)
+    let checklistList = [];        // 가볼곳(체크리스트) 목록
+    let mapMode = 'memory';        // 지도 표시 데이터: 'memory' | 'checklist'
+    let pickTarget = 'memory';     // 위치 선택 후 열 폼: 'memory' | 'checklist'
+    let checklistLoaded = false;   // 체크리스트 최초 로드 여부
+    let _clFilter = 'ALL';         // 가볼곳 카테고리 필터
+    let _clVisitedFilter = 'ALL';  // 가볼곳 방문여부 필터 (ALL | VISITED | TODO)
+    let _tlPlaceFilter = '';       // 타임라인 장소(placeName) 필터 (''=전체)
 
     const currentUid = getUid();
 
@@ -246,6 +272,11 @@ document.addEventListener('DOMContentLoaded', () => {
     Daylog.authHeaders = authHeaders;
     Daylog.handleResponse = handleResponse;
     Daylog.reload = () => loadMemoriesFromServer();
+    Daylog.reloadChecklists = () => loadChecklistsFromServer();
+    Daylog.openChecklistDetailById = (id) => {
+        const c = checklistList.find(x => x.id === id);
+        if (c) openChecklistDetail(c);
+    };
 
     // 해당 마커를 잠깐 빠르게 흔들어 "여기예요" 표시
     function shakeMarker(memory) {
@@ -276,6 +307,33 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 80);
     };
 
+    // 가볼곳 상세에서 위치 클릭 → 지도(체크리스트 모드)로 이동 + 마커 흔들기
+    function shakeChecklistMarker(item) {
+        if (!item) return;
+        const m = markers.find(mk => mk._checklistId === item.id);
+        if (!m || typeof m.getElement !== 'function') return;
+        const el = m.getElement();
+        if (!el) return;
+        const target = el.querySelector('.cl-marker') || el.firstElementChild || el;
+        target.classList.remove('marker-shake');
+        void target.offsetWidth;
+        target.classList.add('marker-shake');
+        setTimeout(() => target.classList.remove('marker-shake'), 900);
+    }
+    Daylog.focusChecklistOnMap = function (item) {
+        if (!item || item.lat == null || item.lng == null) return;
+        closeChecklistDetail();
+        const mapNav = document.querySelector('.nav-item[data-tab="tab-map"]');
+        if (mapNav) mapNav.click();
+        if (mapMode !== 'checklist') setMapMode('checklist');
+        setTimeout(() => {
+            if (!map) return;
+            map.setZoom(16);
+            map.panTo(new naver.maps.LatLng(item.lat, item.lng));
+            setTimeout(() => shakeChecklistMarker(item), 460);
+        }, 120);
+    };
+
     const mapWrapper = document.getElementById('map-wrapper');
     const locationMode = document.getElementById('location-mode');
     const fileInput = document.getElementById('memory-file');
@@ -295,8 +353,6 @@ document.addEventListener('DOMContentLoaded', () => {
     navItems.forEach(item => {
         item.addEventListener('click', (e) => {
             e.preventDefault();
-            // 카메라 메뉴: 탭 전환이 아니라 라이브 카메라 실행
-            if (item.id === 'nav-camera') { openCameraCapture(); return; }
             navItems.forEach(nav => nav.classList.remove('active'));
             item.classList.add('active');
             const targetTab = item.getAttribute('data-tab');
@@ -312,6 +368,9 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             if (targetTab === 'tab-profile') {
                 loadProfiles();
+            }
+            if (targetTab === 'tab-checklist') {
+                loadChecklistsFromServer();
             }
         });
     });
@@ -398,7 +457,7 @@ document.addEventListener('DOMContentLoaded', () => {
         reverseGeocodeAndLabel(lat, lng, prefix || '🎯');
         exitPickMode();
         pickReturnsToForm = false;
-        openMemoryModal();
+        if (pickTarget === 'checklist') openChecklistModal(); else openMemoryModal();
     }
 
     // 좌표 → 상세 주소 (역지오코딩)로 배지 문구 채우기
@@ -484,10 +543,13 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('lm-cancel').addEventListener('click', () => {
         exitPickMode();
         if (pickReturnsToForm) {
-            // 위치 재설정 취소 → 입력하던 폼 그대로 복귀 (사진/제목/내용 유지)
+            // 위치 재설정 취소 → 입력하던 폼 그대로 복귀
             pickReturnsToForm = false;
-            openMemoryModal();
+            if (pickTarget === 'checklist') openChecklistModal(); else openMemoryModal();
             showToast('위치 변경을 취소했어요');
+        } else if (pickTarget === 'checklist') {
+            pickTarget = 'memory';
+            showToast('가볼곳 추가를 취소함');
         } else {
             selectedFile = null;
             if (fileInput) fileInput.value = '';
@@ -530,7 +592,7 @@ document.addEventListener('DOMContentLoaded', () => {
         hideSuggestions();
         exitPickMode();
         pickReturnsToForm = false;
-        openMemoryModal();
+        if (pickTarget === 'checklist') openChecklistModal(); else openMemoryModal();
     }
 
     function renderSuggestions(addresses) {
@@ -600,6 +662,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- 사진 업로드 & 위치 지정 ---
     async function handlePickedImage(file, fromCamera) {
         if (!file) return;
+        pickTarget = 'memory';
         selectedFile = file;
 
         // 미리보기
@@ -1036,10 +1099,334 @@ document.addEventListener('DOMContentLoaded', () => {
                 updateProfileStats();
 
                 const sorted = [...memoryList].sort(sortByDateDesc);
-                renderMarkers(sorted);
-                renderTimeline(sorted);
+                if (mapMode === 'memory') renderMarkers(sorted);
+                buildTimelinePlaceOptions();
+                applyTimelineFilter();
             })
             .catch(err => console.error("데이터 로드 실패:", err));
+    }
+
+    // ==========================================
+    //  가볼곳(체크리스트) — 로드 / 마커 / 목록 / 지도 전환
+    // ==========================================
+    function loadChecklistsFromServer() {
+        if (!requireAuthOrRedirect()) return Promise.resolve();
+        return fetch(`${API_BASE_URL}/api/checklists/${currentUid}`, { headers: authHeaders(true) })
+            .then(handleResponse)
+            .then(list => {
+                checklistList = list || [];
+                checklistLoaded = true;
+                applyChecklistFilter();
+                if (typeof updateChecklistStats === 'function') updateChecklistStats();
+                if (mapMode === 'checklist') renderChecklistMarkers(checklistList);
+            })
+            .catch(err => console.error("가볼곳 로드 실패:", err));
+    }
+
+    // 가볼곳 마커 — 사진 대신 제목 말풍선, 타입별 색상, 방문 표시
+    function renderChecklistMarkers(list) {
+        if (!map) return;
+        markers.forEach(m => m.setMap(null));
+        markers = [];
+        (list || []).forEach(item => {
+            if (!(item.lat && item.lng)) return;
+            const meta = checklistType(item.type);
+            const visitedCls = item.visited ? ' visited' : '';
+            const check = item.visited ? '<span class="cl-marker-check">✓</span>' : '';
+            const markerHtml =
+                '<div class="cl-marker' + visitedCls + '" style="--cl-color:' + meta.color + '">' +
+                check +
+                '<span class="cl-marker-emoji">' + meta.emoji + '</span>' +
+                '<span class="cl-marker-title">' + escapeHtml(item.title || '가볼곳') + '</span>' +
+                '<span class="cl-marker-tail"></span>' +
+                '</div>';
+            const marker = new naver.maps.Marker({
+                position: new naver.maps.LatLng(item.lat, item.lng),
+                map: map,
+                icon: { content: markerHtml, anchor: new naver.maps.Point(20, 46) }
+            });
+            marker._checklistId = item.id;
+            naver.maps.Event.addListener(marker, 'click', () => openChecklistDetail(item));
+            markers.push(marker);
+        });
+    }
+
+    // 현재 모드에 맞춰 지도 마커 재렌더
+    function refreshMapMarkers() {
+        if (mapMode === 'checklist') renderChecklistMarkers(checklistList);
+        else renderMarkers([...memoryList].sort(sortByDateDesc));
+    }
+
+    // 지도 표시 데이터 전환 (추억 ↔ 가볼곳)
+    function setMapMode(mode) {
+        mapMode = mode;
+        updateMapButtons();
+        if (mode === 'checklist' && !checklistLoaded) {
+            loadChecklistsFromServer(); // 로드 완료 시 내부에서 마커 렌더
+        } else {
+            refreshMapMarkers();
+        }
+    }
+
+    // 우측 하단 버튼 라벨/동작 갱신
+    function updateMapButtons() {
+        const toggle = document.getElementById('btn-map-toggle');
+        const action = document.getElementById('btn-map-action');
+        if (toggle) toggle.innerText = (mapMode === 'checklist') ? '💖 추억 보기' : '📌 체크리스트';
+        if (action) action.innerText = (mapMode === 'checklist') ? '📌 가볼곳 추가' : '📸 기록 남기기';
+    }
+
+    // 가볼곳 목록(탭) 렌더 — 타임라인과 유사한 카드 리스트
+    function renderChecklistFeed(sorted) {
+        const feed = document.getElementById('checklist-feed');
+        if (!feed) return;
+        feed.innerHTML = '';
+        if (!sorted.length) {
+            feed.innerHTML = '<div class="empty-state"><span class="es-icon">📌</span><p>아직 등록된 가볼곳이 없어요</p></div>';
+            return;
+        }
+        let idx = 0;
+        sorted.forEach(item => {
+            const meta = checklistType(item.type);
+            const card = document.createElement('div');
+            card.className = 'cl-card' + (item.visited ? ' visited' : '');
+            card.style.animationDelay = (idx * 0.05) + 's';
+            idx++;
+            const badge = item.visited
+                ? '<span class="cl-visited-badge">✓ 다녀옴' + (item.visitedDate ? ' · ' + fmtDate(item.visitedDate) : '') + '</span>'
+                : '<span class="cl-todo-badge">가볼 예정</span>';
+            const loc = [item.placeName, item.address].filter(Boolean).join(' ');
+            card.innerHTML =
+                '<div class="cl-card-main">' +
+                '<div class="cl-card-tags">' +
+                '<span class="cl-type-tag" style="--cl-color:' + meta.color + '">' + meta.emoji + ' ' + meta.label + '</span>' +
+                badge +
+                '</div>' +
+                '<h4 class="cl-card-title">' + escapeHtml(item.title || '') + '</h4>' +
+                (item.content ? '<p class="cl-card-text">' + escapeHtml(item.content) + '</p>' : '') +
+                (loc ? '<div class="cl-card-loc">📍 ' + escapeHtml(loc) + '</div>' : '') +
+                '</div>' +
+                thumbHtml(item.mediaURL, 'cl-thumb');
+            card.addEventListener('click', () => openChecklistDetail(item));
+            feed.appendChild(card);
+        });
+    }
+
+    // 가볼곳 작성 폼 열기 (위치는 currentLatLng/currentLocationMeta 에서 가져옴)
+    window._openChecklistForm = function () {
+        const badge = document.getElementById('cl-location-badge');
+        const place = (currentLocationMeta && currentLocationMeta.placeName) || '';
+        const addr = (currentLocationMeta && currentLocationMeta.address) || '';
+        const text = [place, addr].filter(Boolean).join(' ');
+        if (badge) {
+            badge.className = 'location-badge success';
+            badge.innerText = text ? ('📍 ' + text) : '📍 선택한 위치';
+            if (!text && currentLatLng) {
+                reverseGeocode(currentLatLng.lat, currentLatLng.lng, (a) => {
+                    if (a) { currentLocationMeta = splitKoreanAddress(a); badge.innerText = '📍 ' + a; }
+                });
+            }
+        }
+    };
+
+    // 가볼곳 추가 버튼 → 위치 선택 모드 진입 (체크리스트용)
+    function startChecklistCreate() {
+        pickTarget = 'checklist';
+        enterPickMode();
+    }
+    window._startChecklistCreate = startChecklistCreate;
+
+    // 가볼곳 제출 데이터 묶기 (모듈 외부 폼 핸들러에서 호출)
+    window._submitChecklist = function () {
+        if (!requireAuthOrRedirect()) return;
+        if (!currentLatLng) { showToast('위치 정보가 없습니다'); return; }
+        const title = document.getElementById('cl-title').value.trim();
+        if (!title) { showToast('제목을 입력해주세요'); return; }
+        const visited = document.getElementById('cl-visited').checked;
+        const visitedDate = document.getElementById('cl-visited-date').value;
+        const dto = {
+            title: title,
+            content: document.getElementById('cl-content').value,
+            lat: currentLatLng.lat,
+            lng: currentLatLng.lng,
+            placeName: (currentLocationMeta && currentLocationMeta.placeName) || '',
+            address: (currentLocationMeta && currentLocationMeta.address) || '',
+            type: window._clSelectedType || 'ETC',
+            visited: visited,
+            visitedDate: (visited && visitedDate) ? visitedDate : null
+        };
+        const fd = new FormData();
+        fd.append('uid', currentUid);
+        fd.append('checklistData', JSON.stringify(dto));
+        const imgInput = document.getElementById('cl-image');
+        if (imgInput && imgInput.files && imgInput.files[0]) fd.append('mediaData', imgInput.files[0]);
+
+        const submitBtn = document.querySelector('#checklist-form .submit-btn');
+        if (submitBtn) { submitBtn.disabled = true; submitBtn.innerText = '추가하는 중...'; }
+
+        fetch(`${API_BASE_URL}/api/checklists`, { method: 'POST', headers: authHeaders(false), body: fd })
+            .then(handleResponse)
+            .then(() => {
+                closeChecklistModal();
+                showToast('가볼곳을 추가했어요 📌');
+                pickTarget = 'memory';
+                if (mapMode !== 'checklist') setMapMode('checklist');
+                else loadChecklistsFromServer();
+            })
+            .catch(err => { console.error(err); showToast('추가 실패. 다시 시도해주세요.'); })
+            .finally(() => { if (submitBtn) { submitBtn.disabled = false; submitBtn.innerText = '추가하기 📌'; } });
+    };
+
+    // 우측 하단 플로팅 버튼 동작
+    const mapToggleBtn = document.getElementById('btn-map-toggle');
+    if (mapToggleBtn) mapToggleBtn.addEventListener('click', () => {
+        setMapMode(mapMode === 'checklist' ? 'memory' : 'checklist');
+    });
+    const mapActionBtn = document.getElementById('btn-map-action');
+    if (mapActionBtn) mapActionBtn.addEventListener('click', () => {
+        if (mapMode === 'checklist') startChecklistCreate();
+        else { pickTarget = 'memory'; document.getElementById('memory-file').click(); }
+    });
+    // 가볼곳 위치 다시 설정
+    const clResetLoc = document.getElementById('cl-reset-location');
+    if (clResetLoc) clResetLoc.addEventListener('click', () => {
+        pickReturnsToForm = true;
+        pickTarget = 'checklist';
+        document.getElementById('checklist-modal').classList.add('hidden');
+        enterPickMode();
+    });
+    updateMapButtons();
+
+    // ---- 가볼곳 폼 상호작용 (타입 칩 / 방문 체크 / 제출) ----
+    function bindTypeChips(containerId, setSel) {
+        const box = document.getElementById(containerId);
+        if (!box) return;
+        box.querySelectorAll('.cl-type-chip').forEach(chip => {
+            chip.style.setProperty('--cl-color', checklistType(chip.dataset.type).color);
+            chip.addEventListener('click', () => {
+                box.querySelectorAll('.cl-type-chip').forEach(c => c.classList.remove('selected'));
+                chip.classList.add('selected');
+                setSel(chip.dataset.type);
+            });
+        });
+    }
+    bindTypeChips('cl-type-options', (t) => { window._clSelectedType = t; });
+    bindTypeChips('cl-edit-type-options', (t) => { window._clEditSelectedType = t; });
+
+    // 방문 체크박스 → 날짜 입력 활성/비활성
+    function bindVisitedToggle(checkId, dateId) {
+        const chk = document.getElementById(checkId);
+        const date = document.getElementById(dateId);
+        if (!chk || !date) return;
+        chk.addEventListener('change', () => {
+            date.disabled = !chk.checked;
+            const lbl = chk.closest('.cl-check-label');
+            if (lbl) lbl.classList.toggle('checked', chk.checked);
+            if (chk.checked && !date.value) date.value = new Date().toISOString().substring(0, 10);
+        });
+    }
+    bindVisitedToggle('cl-visited', 'cl-visited-date');
+    bindVisitedToggle('cl-edit-visited', 'cl-edit-visited-date');
+
+    const checklistForm = document.getElementById('checklist-form');
+    if (checklistForm) checklistForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        window._submitChecklist();
+    });
+
+    const clEditForm = document.getElementById('cl-edit-form');
+    if (clEditForm) clEditForm.addEventListener('submit', (e) => { e.preventDefault(); saveChecklistEdit(); });
+    const clEditCancel = document.getElementById('cl-edit-cancel');
+    if (clEditCancel) clEditCancel.addEventListener('click', exitChecklistEdit);
+    // 새 사진 선택 시 미리보기 교체
+    const clEditImgFile = document.getElementById('cl-edit-image-file');
+    if (clEditImgFile) clEditImgFile.addEventListener('change', (e) => {
+        const f = e.target.files && e.target.files[0];
+        if (!f) return;
+        const wrap = document.getElementById('cl-edit-image-wrap');
+        const img = document.getElementById('cl-edit-image');
+        const reader = new FileReader();
+        reader.onload = (ev) => { if (img) img.src = ev.target.result; if (wrap) wrap.classList.remove('hidden'); };
+        reader.readAsDataURL(f);
+    });
+
+    // 모달 바깥 클릭으로 닫기
+    const clModal = document.getElementById('checklist-modal');
+    if (clModal) clModal.addEventListener('click', (e) => { if (e.target.id === 'checklist-modal') closeChecklistModal(); });
+    const clDetail = document.getElementById('checklist-detail-modal');
+    if (clDetail) clDetail.addEventListener('click', (e) => { if (e.target.id === 'checklist-detail-modal') closeChecklistDetail(); });
+
+    // ---- 타임라인 검색/필터 (장소 라디오 + 날짜) ----
+    // 현재 추억들의 placeName 값으로 장소 콤보박스 옵션 구성
+    function buildTimelinePlaceOptions() {
+        const sel = document.getElementById('tl-filter-place');
+        if (!sel) return;
+        const places = Array.from(new Set(
+            memoryList.map(m => (m.placeName || '').trim()).filter(Boolean)
+        )).sort((a, b) => a.localeCompare(b, 'ko'));
+        // 선택 중이던 값이 사라졌으면 전체로 복귀
+        if (_tlPlaceFilter && !places.includes(_tlPlaceFilter)) _tlPlaceFilter = '';
+        let html = '<option value="">전체</option>';
+        places.forEach(p => {
+            html += '<option value="' + escapeHtml(p) + '"' + (_tlPlaceFilter === p ? ' selected' : '') + '>' + escapeHtml(p) + '</option>';
+        });
+        sel.innerHTML = html;
+        sel.value = _tlPlaceFilter;
+        sel.onchange = () => { _tlPlaceFilter = sel.value; applyTimelineFilter(); };
+    }
+
+    function applyTimelineFilter() {
+        const dateEl = document.getElementById('tl-filter-date');
+        const day = (dateEl && dateEl.value) ? dateEl.value : '';
+        let list = [...memoryList].sort(sortByDateDesc);
+        if (_tlPlaceFilter) list = list.filter(m => (m.placeName || '').trim() === _tlPlaceFilter);
+        if (day) list = list.filter(m => (m.createdAt || '').substring(0, 10) === day);
+        renderTimeline(list);
+    }
+    const tlFilterToggle = document.getElementById('tl-filter-toggle');
+    const tlFilterBar = document.getElementById('tl-filter-bar');
+    if (tlFilterToggle && tlFilterBar) {
+        tlFilterToggle.addEventListener('click', () => tlFilterBar.classList.toggle('hidden'));
+    }
+    const tlFilterSearch = document.getElementById('tl-filter-search');
+    if (tlFilterSearch) tlFilterSearch.addEventListener('click', applyTimelineFilter);
+    const tlFilterReset = document.getElementById('tl-filter-reset');
+    if (tlFilterReset) tlFilterReset.addEventListener('click', () => {
+        _tlPlaceFilter = '';
+        const sel = document.getElementById('tl-filter-place'); if (sel) sel.value = '';
+        const d = document.getElementById('tl-filter-date'); if (d) d.value = '';
+        applyTimelineFilter();
+    });
+
+    // ---- 가볼곳 필터 (카테고리 + 방문여부) ----
+    function applyChecklistFilter() {
+        let list = [...checklistList].sort(sortByDateDesc);
+        if (_clFilter && _clFilter !== 'ALL') list = list.filter(c => (c.type || 'ETC') === _clFilter);
+        if (_clVisitedFilter === 'VISITED') list = list.filter(c => c.visited);
+        else if (_clVisitedFilter === 'TODO') list = list.filter(c => !c.visited);
+        renderChecklistFeed(list);
+    }
+    const clFilterBar = document.getElementById('cl-filter-bar');
+    if (clFilterBar) {
+        clFilterBar.querySelectorAll('.cl-filter-chip').forEach(chip => {
+            chip.addEventListener('click', () => {
+                clFilterBar.querySelectorAll('.cl-filter-chip').forEach(c => c.classList.remove('selected'));
+                chip.classList.add('selected');
+                _clFilter = chip.dataset.filter || 'ALL';
+                applyChecklistFilter();
+            });
+        });
+    }
+    const clVisitedBar = document.getElementById('cl-visited-filter-bar');
+    if (clVisitedBar) {
+        clVisitedBar.querySelectorAll('.cl-vfilter-chip').forEach(chip => {
+            chip.addEventListener('click', () => {
+                clVisitedBar.querySelectorAll('.cl-vfilter-chip').forEach(c => c.classList.remove('selected'));
+                chip.classList.add('selected');
+                _clVisitedFilter = chip.dataset.vfilter || 'ALL';
+                applyChecklistFilter();
+            });
+        });
     }
 
     // --- 지도 마커 (줌 시 깜빡임 방지: 기존 마커 제거 후 재생성, 사진은 배경이미지) ---
@@ -1100,9 +1487,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 card.style.animationDelay = (idx * 0.05) + 's';
                 idx++;
 
-                const thumb = memory.mediaURL
-                    ? `<div class="tl-thumb" style="background-image:url('${memory.mediaURL}')"></div>`
-                    : '';
+                const thumb = thumbHtml(memory.mediaURL, 'tl-thumb');
 
                 card.innerHTML =
                     '<div class="tl-main">' +
@@ -1169,6 +1554,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 renderProfileBox('me', meUser, '👦', '나');
                 renderProfileBox('partner', partnerUser, '👧', '상대방');
                 updateProfileStats();
+                // 체크리스트 개수/목록도 준비 (이미 로드돼 있으면 라벨만 갱신)
+                if (checklistLoaded) updateChecklistStats(); else loadChecklistsFromServer();
                 maybePromptNickname();
             })
             .catch(err => {
@@ -1340,6 +1727,10 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('btn-edit-profile').addEventListener('click', openEditPage);
     const btnTrash = document.getElementById('btn-trash');
     if (btnTrash) btnTrash.addEventListener('click', openTrashModal);
+    const btnProfileLogout = document.getElementById('btn-profile-logout');
+    if (btnProfileLogout) btnProfileLogout.addEventListener('click', () => {
+        if (confirm('로그아웃을 진행합니다.')) redirectToLogin('로그아웃 되었습니다.');
+    });
     document.getElementById('edit-back').addEventListener('click', closeEditPage);
     document.getElementById('edit-avatar-wrap').addEventListener('click', () => editFileInput.click());
 
@@ -1436,6 +1827,34 @@ document.addEventListener('DOMContentLoaded', () => {
         openMemoryListModal(b.title, b.items);
     }
 
+    // 유저별 체크리스트 개수 표시 + 라벨
+    function updateChecklistStats() {
+        const set = (id, v) => { const el = document.getElementById(id); if (el) el.innerText = v; };
+        const meUid = meUser && meUser.uid;
+        const pUid = partnerUser && partnerUser.uid;
+        set('stat-cl-me-count', checklistList.filter(c => c.ownerUid === meUid).length);
+        set('stat-cl-partner-count', checklistList.filter(c => c.ownerUid === pUid).length);
+        const meLabel = document.getElementById('stat-cl-me-label');
+        const pLabel = document.getElementById('stat-cl-partner-label');
+        if (meLabel && meUser) meLabel.innerText = displayNameOf(meUser, '나') + '의 체크리스트';
+        if (pLabel && partnerUser) pLabel.innerText = displayNameOf(partnerUser, '상대방') + '의 체크리스트';
+    }
+    Daylog.updateChecklistStats = updateChecklistStats;
+
+    function openChecklistStatList(kind) {
+        const meUid = meUser && meUser.uid;
+        const pUid = partnerUser && partnerUser.uid;
+        let title, items;
+        if (kind === 'me') {
+            title = displayNameOf(meUser, '나') + '의 체크리스트';
+            items = checklistList.filter(c => c.ownerUid === meUid);
+        } else {
+            title = displayNameOf(partnerUser, '상대방') + '의 체크리스트';
+            items = checklistList.filter(c => c.ownerUid === pUid);
+        }
+        openChecklistListModal(title, [...items].sort(sortByDateDesc));
+    }
+
     function bindStatClicks() {
         const bind = (id, fn) => {
             const el = document.getElementById(id);
@@ -1445,6 +1864,8 @@ document.addEventListener('DOMContentLoaded', () => {
         bind('stat-card-total', () => openStatList('total'));
         bind('stat-card-me', () => openStatList('me'));
         bind('stat-card-partner', () => openStatList('partner'));
+        bind('stat-card-cl-me', () => openChecklistStatList('me'));
+        bind('stat-card-cl-partner', () => openChecklistStatList('partner'));
     }
     bindStatClicks();
 
@@ -1459,7 +1880,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.target.id === 'detail-modal') closeDetailModal();
     });
     document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') { closeLightbox(); closeEditPage(); closeMemoryModal(); closeDetailModal(); }
+        if (e.key === 'Escape') { closeLightbox(); closeEditPage(); closeMemoryModal(); closeDetailModal(); closeChecklistModal(); closeChecklistDetail(); }
     });
 
     // ===== 이미지 라이트박스 (확대 + 드래그) =====
@@ -1614,6 +2035,204 @@ function closeMemoryModal() {
     if (rt) rt.classList.add('hidden');
     const lm = document.getElementById('location-mode');
     if (lm) lm.classList.add('hidden');
+}
+
+// ====== 가볼곳(체크리스트) 모달 ======
+function openChecklistModal() {
+    const modal = document.getElementById('checklist-modal');
+    if (!modal) return;
+    modal.classList.remove('hidden');
+    if (typeof window._openChecklistForm === 'function') window._openChecklistForm();
+}
+
+function closeChecklistModal() {
+    const modal = document.getElementById('checklist-modal');
+    if (!modal) return;
+    modal.classList.add('hidden');
+    const form = document.getElementById('checklist-form');
+    if (form) form.reset();
+    window._clSelectedType = null;
+    document.querySelectorAll('#cl-type-options .cl-type-chip').forEach(c => c.classList.remove('selected'));
+    const vd = document.getElementById('cl-visited-date');
+    if (vd) vd.disabled = true;
+    const clChk = document.getElementById('cl-visited');
+    if (clChk) { clChk.checked = false; const lbl = clChk.closest('.cl-check-label'); if (lbl) lbl.classList.remove('checked'); }
+    const lm = document.getElementById('location-mode');
+    if (lm) lm.classList.add('hidden');
+}
+
+let _detailChecklist = null;
+
+function openChecklistDetail(item) {
+    _detailChecklist = item;
+    const view = document.getElementById('cl-detail-view');
+    const editForm = document.getElementById('cl-edit-form');
+    if (editForm) editForm.classList.add('hidden');
+    if (view) view.classList.remove('hidden');
+
+    const meta = checklistType(item.type);
+    const isOwner = !!(item.ownerUid && Daylog.currentUid && item.ownerUid === Daylog.currentUid);
+    const loc = [item.placeName, item.address].filter(Boolean).join(' ');
+    const contentHtml = escapeHtml(item.content || '').replace(/\n/g, '<br>');
+
+    // 작성자(= 만든 사람) 정보
+    const author = (Daylog.usersByUid && Daylog.usersByUid[item.ownerUid]) || null;
+    let authorName = '';
+    if (author) {
+        authorName = (author.nickname && String(author.nickname).trim())
+            ? author.nickname
+            : (typeof normalizeDisplayName === 'function' ? normalizeDisplayName(author.name) : (author.name || ''));
+    }
+    const authorPhoto = (author && author.profileURL) ? author.profileURL : DEFAULT_AVATAR;
+
+    const visitedHtml = item.visited
+        ? '<span class="meta-item cl-meta-visited">✓ 다녀옴' + (item.visitedDate ? ' · ' + fmtDate(item.visitedDate) : '') + '</span>'
+        : '<span class="meta-item cl-meta-todo">아직 안 가봤어요</span>';
+    const imageHtml = item.mediaURL
+        ? '<div class="detail-image-wrap"><img src="' + item.mediaURL + '" alt="가볼곳 사진" id="cl-detail-image"></div>'
+        : '';
+
+    view.innerHTML =
+        '<div class="detail-container">' +
+        '<div class="detail-header">' +
+        '<span class="cl-type-tag cl-type-tag-lg" style="--cl-color:' + meta.color + '">' + meta.emoji + ' ' + meta.label + '</span>' +
+        '<h2 class="detail-title">' + escapeHtml(item.title || '') + '</h2>' +
+        '<div class="detail-author">' +
+        '<div class="da-avatar" id="cl-author-avatar" style="background-image:url(\'' + authorPhoto + '\')"></div>' +
+        '<span class="da-name">' + escapeHtml(authorName || '작성자') + '</span>' +
+        '</div>' +
+        '<div class="detail-meta">' +
+        visitedHtml +
+        (loc ? '<span class="meta-item meta-loc-clickable" id="cl-detail-loc" title="지도에서 보기">📍 ' + escapeHtml(loc) + '</span>' : '') +
+        '</div>' +
+        '</div>' +
+        imageHtml +
+        (item.content ? '<div class="detail-body"><p>' + contentHtml + '</p></div>' : '') +
+        '</div>';
+
+    const headerActions = document.getElementById('cl-detail-header-actions');
+    if (headerActions) {
+        headerActions.innerHTML = isOwner
+            ? '<button type="button" class="detail-edit-btn" id="cl-detail-edit-open">✏️ 수정</button>' +
+              '<button type="button" class="detail-trash-btn" id="cl-detail-del-open">🗑️</button>'
+            : '';
+    }
+
+    const di = document.getElementById('cl-detail-image');
+    if (di) di.addEventListener('click', () => { if (di.src) openLightbox(di.src, di); });
+    const av = document.getElementById('cl-author-avatar');
+    if (av) av.addEventListener('click', () => openLightbox(authorPhoto, av));
+    const locEl = document.getElementById('cl-detail-loc');
+    if (locEl && item.lat != null && item.lng != null) {
+        locEl.addEventListener('click', () => Daylog.focusChecklistOnMap && Daylog.focusChecklistOnMap(item));
+    }
+    const eo = document.getElementById('cl-detail-edit-open');
+    if (eo) eo.addEventListener('click', () => enterChecklistEdit(item));
+    const dl = document.getElementById('cl-detail-del-open');
+    if (dl) dl.addEventListener('click', () => trashChecklist(item.id));
+
+    document.getElementById('checklist-detail-modal').classList.remove('hidden');
+}
+
+function enterChecklistEdit(item) {
+    const view = document.getElementById('cl-detail-view');
+    const editForm = document.getElementById('cl-edit-form');
+    if (!editForm) return;
+
+    // 위치(수정 불가) 표시
+    const loc = [item.placeName, item.address].filter(Boolean).join(' ');
+    const locEl = document.getElementById('cl-edit-loc');
+    if (locEl) locEl.textContent = loc ? ('📍 ' + loc) : '📍 위치';
+
+    // 타입 칩 선택 반영
+    window._clEditSelectedType = item.type || 'ETC';
+    document.querySelectorAll('#cl-edit-type-options .cl-type-chip').forEach(c => {
+        c.classList.toggle('selected', c.dataset.type === window._clEditSelectedType);
+    });
+
+    // 현재 사진 미리보기 + 파일 입력 초기화
+    const imgWrap = document.getElementById('cl-edit-image-wrap');
+    const img = document.getElementById('cl-edit-image');
+    const fileInput = document.getElementById('cl-edit-image-file');
+    if (fileInput) fileInput.value = '';
+    if (imgWrap && img) {
+        if (item.mediaURL) { img.src = item.mediaURL; imgWrap.classList.remove('hidden'); }
+        else { img.removeAttribute('src'); imgWrap.classList.add('hidden'); }
+    }
+
+    document.getElementById('cl-edit-title').value = item.title || '';
+    document.getElementById('cl-edit-content').value = item.content || '';
+    const chk = document.getElementById('cl-edit-visited');
+    const date = document.getElementById('cl-edit-visited-date');
+    chk.checked = !!item.visited;
+    date.disabled = !item.visited;
+    date.value = item.visitedDate ? String(item.visitedDate).substring(0, 10) : '';
+    const editLbl = chk.closest('.cl-check-label');
+    if (editLbl) editLbl.classList.toggle('checked', !!item.visited);
+
+    if (view) view.classList.add('hidden');
+    editForm.classList.remove('hidden');
+}
+
+function exitChecklistEdit() {
+    const view = document.getElementById('cl-detail-view');
+    const editForm = document.getElementById('cl-edit-form');
+    if (editForm) editForm.classList.add('hidden');
+    if (view) view.classList.remove('hidden');
+}
+
+function saveChecklistEdit() {
+    const item = _detailChecklist;
+    if (!item) return;
+    const title = document.getElementById('cl-edit-title').value.trim();
+    if (!title) { showToast('제목을 입력해주세요'); return; }
+    const visited = document.getElementById('cl-edit-visited').checked;
+    const visitedDate = document.getElementById('cl-edit-visited-date').value;
+    const dto = {
+        title: title,
+        content: document.getElementById('cl-edit-content').value,
+        type: window._clEditSelectedType || item.type || 'ETC',
+        visited: visited,
+        visitedDate: (visited && visitedDate) ? visitedDate : null
+    };
+    const fd = new FormData();
+    fd.append('checklistData', JSON.stringify(dto));
+    const fileInput = document.getElementById('cl-edit-image-file');
+    if (fileInput && fileInput.files && fileInput.files[0]) fd.append('mediaData', fileInput.files[0]);
+
+    const btn = document.querySelector('#cl-edit-form .submit-btn');
+    if (btn) { btn.disabled = true; btn.innerText = '저장 중...'; }
+
+    fetch(`${Daylog.api}/api/checklists/${item.id}`, {
+        method: 'PUT',
+        headers: Daylog.authHeaders(false), // FormData → Content-Type 자동 설정
+        body: fd
+    })
+        .then(Daylog.handleResponse)
+        .then(() => {
+            showToast('수정 완료 ✨');
+            closeChecklistDetail();
+            Daylog.reloadChecklists();
+        })
+        .catch(err => { console.error(err); showToast('수정 실패. 다시 시도해주세요.'); })
+        .finally(() => { if (btn) { btn.disabled = false; btn.innerText = '저장하기 ✨'; } });
+}
+
+function trashChecklist(id) {
+    if (!confirm('이 가볼곳을 휴지통으로 옮길까요?')) return;
+    fetch(`${Daylog.api}/api/checklists/${id}/trash`, { method: 'PUT', headers: Daylog.authHeaders(true) })
+        .then(Daylog.handleResponse)
+        .then(() => { showToast('휴지통으로 이동했어요'); closeChecklistDetail(); Daylog.reloadChecklists(); })
+        .catch(err => { console.error(err); showToast('이동 실패. 다시 시도해주세요.'); });
+}
+
+function closeChecklistDetail() {
+    const modal = document.getElementById('checklist-detail-modal');
+    if (modal) modal.classList.add('hidden');
+    const ha = document.getElementById('cl-detail-header-actions');
+    if (ha) ha.innerHTML = '';
+    exitChecklistEdit();
+    _detailChecklist = null;
 }
 
 let _detailMemory = null;
@@ -2000,9 +2619,10 @@ function openTrashModal() {
     const uid = Daylog.currentUid;
     Promise.all([
         fetch(`${Daylog.api}/api/memories/trash/${uid}`, { headers: Daylog.authHeaders(true) }).then(Daylog.handleResponse).catch(() => []),
-        fetch(`${Daylog.api}/comment/trash`, { headers: Daylog.authHeaders(true) }).then(Daylog.handleResponse).catch(() => [])
-    ]).then(([memories, comments]) => {
-        renderTrash(memories || [], comments || []);
+        fetch(`${Daylog.api}/comment/trash`, { headers: Daylog.authHeaders(true) }).then(Daylog.handleResponse).catch(() => []),
+        fetch(`${Daylog.api}/api/checklists/trash/${uid}`, { headers: Daylog.authHeaders(true) }).then(Daylog.handleResponse).catch(() => [])
+    ]).then(([memories, comments, checklists]) => {
+        renderTrash(memories || [], comments || [], checklists || []);
     });
 }
 
@@ -2011,11 +2631,12 @@ function closeTrashModal() {
     if (modal) modal.classList.add('hidden');
 }
 
-function renderTrash(memories, comments) {
+function renderTrash(memories, comments, checklists) {
     const body = document.getElementById('trash-modal-body');
     if (!body) return;
+    checklists = checklists || [];
 
-    if (!memories.length && !comments.length) {
+    if (!memories.length && !comments.length && !checklists.length) {
         body.innerHTML = '<div class="empty-state"><span class="es-icon">🗑️</span><p>휴지통이 비어 있어요</p></div>';
         return;
     }
@@ -2064,6 +2685,27 @@ function renderTrash(memories, comments) {
         });
     }
 
+    if (checklists.length) {
+        html += '<div class="trash-group-title">가볼곳 ' + checklists.length + '</div>';
+        checklists.forEach(c => {
+            const meta = (typeof checklistType === 'function') ? checklistType(c.type) : { emoji: '📌', label: '' };
+            const loc = [c.placeName, c.address].filter(Boolean).join(' ');
+            html +=
+                '<div class="trash-row">' +
+                '<div class="lm-thumb lm-thumb-empty">' + meta.emoji + '</div>' +
+                '<div class="lm-row-main">' +
+                '<div class="lm-row-date">' + escapeHtml(meta.label || '가볼곳') + '</div>' +
+                '<div class="lm-row-title">' + escapeHtml(c.title || '') + '</div>' +
+                '<div class="lm-row-text">' + escapeHtml(loc) + '</div>' +
+                '</div>' +
+                '<div class="trash-actions">' +
+                '<button type="button" class="trash-restore" onclick="restoreChecklist(' + c.id + ')">복원</button>' +
+                '<button type="button" class="trash-delete" onclick="deleteChecklistForever(' + c.id + ')">영구삭제</button>' +
+                '</div>' +
+                '</div>';
+        });
+    }
+
     body.innerHTML = html;
 }
 
@@ -2092,6 +2734,21 @@ function restoreComment(id) {
 function deleteCommentForever(id) {
     if (!confirm('이 댓글을 영구적으로 삭제할까요?\n삭제하면 되돌릴 수 없어요.')) return;
     fetch(`${Daylog.api}/comment/${id}`, { method: 'DELETE', headers: Daylog.authHeaders(true) })
+        .then(Daylog.handleResponse)
+        .then(() => { showToast('영구 삭제했어요'); openTrashModal(); })
+        .catch(err => { console.error(err); showToast('삭제 실패'); });
+}
+
+function restoreChecklist(id) {
+    fetch(`${Daylog.api}/api/checklists/${id}/restore`, { method: 'PUT', headers: Daylog.authHeaders(true) })
+        .then(Daylog.handleResponse)
+        .then(() => { showToast('복원했어요'); openTrashModal(); Daylog.reloadChecklists(); })
+        .catch(err => { console.error(err); showToast('복원 실패'); });
+}
+
+function deleteChecklistForever(id) {
+    if (!confirm('이 가볼곳을 영구적으로 삭제할까요?\n삭제하면 되돌릴 수 없어요.')) return;
+    fetch(`${Daylog.api}/api/checklists/${id}`, { method: 'DELETE', headers: Daylog.authHeaders(true) })
         .then(Daylog.handleResponse)
         .then(() => { showToast('영구 삭제했어요'); openTrashModal(); })
         .catch(err => { console.error(err); showToast('삭제 실패'); });
@@ -2134,6 +2791,44 @@ function closeListModal() {
     const modal = document.getElementById('list-modal');
     if (modal) modal.classList.add('hidden');
     Daylog._openListKind = null;
+}
+
+// 유저별 체크리스트 목록 모달 (추억 목록과 동일한 UI, 클릭 시 가볼곳 상세)
+function openChecklistListModal(title, items) {
+    const modal = document.getElementById('list-modal');
+    const titleEl = document.getElementById('list-modal-title');
+    const body = document.getElementById('list-modal-body');
+    if (!modal || !body) return;
+    Daylog._openListKind = null; // 새로고침 시 추억 목록 재구성 로직과 분리
+    titleEl.textContent = title;
+    body.innerHTML = '';
+
+    if (!items || !items.length) {
+        body.innerHTML = '<div class="empty-state"><span class="es-icon">📌</span><p>표시할 가볼곳이 없습니다</p></div>';
+    } else {
+        items.forEach(item => {
+            const meta = (typeof checklistType === 'function') ? checklistType(item.type) : { emoji: '📌', label: '' };
+            const loc = [item.placeName, item.address].filter(Boolean).join(' ');
+            const thumb = item.mediaURL
+                ? `<div class="lm-thumb" style="background-image:url('${item.mediaURL}')"></div>`
+                : '<div class="lm-thumb lm-thumb-empty">' + meta.emoji + '</div>';
+            const badge = item.visited
+                ? '<span class="cl-visited-badge">✓ 다녀옴</span>'
+                : '<span class="cl-todo-badge">가볼 예정</span>';
+            const row = document.createElement('div');
+            row.className = 'lm-row';
+            row.innerHTML =
+                thumb +
+                '<div class="lm-row-main">' +
+                '<div class="lm-row-date">' + escapeHtml(meta.label || '가볼곳') + ' · ' + badge + '</div>' +
+                '<div class="lm-row-title">' + escapeHtml(item.title || '') + '</div>' +
+                '<div class="lm-row-text">' + escapeHtml(loc || (item.content || '')) + '</div>' +
+                '</div>';
+            row.addEventListener('click', () => { closeListModal(); openChecklistDetail(item); });
+            body.appendChild(row);
+        });
+    }
+    modal.classList.remove('hidden');
 }
 
 function showDDayInfo() {

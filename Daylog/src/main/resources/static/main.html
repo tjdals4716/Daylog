@@ -51,12 +51,11 @@
                 </div>
             </div>
 
-            <!-- 카메라 버튼 -->
+            <!-- 우측 하단 플로팅 버튼: (위) 지도 데이터 전환 토글 · (아래) 기록/추가 액션 -->
             <div class="floating-camera-zone">
                 <input type="file" id="memory-file" accept="image/*" style="display: none;">
-                <button type="button" class="camera-btn" onclick="document.getElementById('memory-file').click();">
-                    📸 기록 남기기
-                </button>
+                <button type="button" class="map-fab toggle-fab" id="btn-map-toggle">📌 체크리스트</button>
+                <button type="button" class="map-fab action-fab" id="btn-map-action">📸 기록 남기기</button>
             </div>
         </div>
     </section>
@@ -65,8 +64,49 @@
     <section id="tab-timeline" class="tab-content" style="display: none;">
         <div class="content-wrapper">
             <section class="timeline-section">
-                <h3 class="section-title">타임라인 📖</h3>
+                <div class="section-head-row">
+                    <h3 class="section-title">타임라인 📖</h3>
+                    <button type="button" id="tl-filter-toggle" class="filter-toggle-btn">🔍 검색</button>
+                </div>
+                <div id="tl-filter-bar" class="filter-bar hidden">
+                    <div class="filter-field">
+                        <span class="filter-label">장소</span>
+                        <select id="tl-filter-place" class="filter-select">
+                            <option value="">전체</option>
+                        </select>
+                    </div>
+                    <div class="filter-field">
+                        <span class="filter-label">날짜</span>
+                        <input type="date" id="tl-filter-date">
+                    </div>
+                    <div class="filter-bar-actions">
+                        <button type="button" id="tl-filter-search" class="filter-search-btn">검색</button>
+                        <button type="button" id="tl-filter-reset" class="filter-reset-btn">초기화</button>
+                    </div>
+                </div>
                 <div id="timeline-feed"></div>
+            </section>
+        </div>
+    </section>
+
+    <!-- 가볼곳(체크리스트) 탭 -->
+    <section id="tab-checklist" class="tab-content" style="display: none;">
+        <div class="content-wrapper">
+            <section class="timeline-section">
+                <h3 class="section-title">가볼곳 📌</h3>
+                <div id="cl-filter-bar" class="cl-filter-bar">
+                    <button type="button" class="cl-filter-chip selected" data-filter="ALL">전체</button>
+                    <button type="button" class="cl-filter-chip" data-filter="CAFE">☕ 카페</button>
+                    <button type="button" class="cl-filter-chip" data-filter="FOOD">🍴 식당</button>
+                    <button type="button" class="cl-filter-chip" data-filter="SPOT">📍 명소</button>
+                    <button type="button" class="cl-filter-chip" data-filter="ETC">✨ 기타</button>
+                </div>
+                <div id="cl-visited-filter-bar" class="cl-filter-bar cl-visited-filter">
+                    <button type="button" class="cl-vfilter-chip selected" data-vfilter="ALL">전체</button>
+                    <button type="button" class="cl-vfilter-chip" data-vfilter="VISITED">✓ 다녀온 곳</button>
+                    <button type="button" class="cl-vfilter-chip" data-vfilter="TODO">가볼 곳</button>
+                </div>
+                <div id="checklist-feed"></div>
             </section>
         </div>
     </section>
@@ -113,8 +153,21 @@
                 </div>
             </div>
 
+            <!-- 유저별 체크리스트(가볼곳) 메뉴 -->
+            <div class="stats-grid cl-stats-grid">
+                <div class="stat stat-cl" id="stat-card-cl-me">
+                    <span class="stat-num" id="stat-cl-me-count">0</span>
+                    <span class="stat-label" id="stat-cl-me-label">내가 만든 체크리스트</span>
+                </div>
+                <div class="stat stat-cl" id="stat-card-cl-partner">
+                    <span class="stat-num" id="stat-cl-partner-count">0</span>
+                    <span class="stat-label" id="stat-cl-partner-label">상대가 만든 체크리스트</span>
+                </div>
+            </div>
+
             <button type="button" id="btn-edit-profile" class="edit-profile-btn">✏️ 프로필 수정</button>
             <button type="button" id="btn-trash" class="trash-menu-btn">🗑️ 휴지통</button>
+            <button type="button" id="btn-profile-logout" class="logout-menu-btn">🚪 로그아웃</button>
 
             <p class="version-text">Daylog v2.0.0</p>
         </div>
@@ -124,10 +177,6 @@
 
 <!-- 바텀 네비 -->
 <nav class="bottom-nav">
-    <a href="#" class="nav-item" id="nav-camera">
-        <span class="nav-icon">📷</span>
-        <span class="nav-text">카메라</span>
-    </a>
     <a href="#" class="nav-item active" data-tab="tab-map">
         <span class="nav-icon">🗺️</span>
         <span class="nav-text">지도</span>
@@ -135,6 +184,10 @@
     <a href="#" class="nav-item" data-tab="tab-timeline">
         <span class="nav-icon">📖</span>
         <span class="nav-text">타임라인</span>
+    </a>
+    <a href="#" class="nav-item" data-tab="tab-checklist">
+        <span class="nav-icon">📌</span>
+        <span class="nav-text">가볼곳</span>
     </a>
     <a href="#" class="nav-item" data-tab="tab-profile">
         <span class="nav-icon">👤</span>
@@ -208,6 +261,104 @@
             <p class="detail-edit-note">※ 사진과 위치는 수정할 수 없어요.</p>
             <div class="detail-edit-actions">
                 <button type="button" id="detail-edit-cancel" class="cancel-edit-btn">취소</button>
+                <button type="submit" class="submit-btn">저장하기 ✨</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- 가볼곳(체크리스트) 작성 모달 -->
+<div id="checklist-modal" class="modal hidden">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>가볼곳 추가 📌</h3>
+            <button type="button" class="close-modal" onclick="closeChecklistModal()">&times;</button>
+        </div>
+        <form id="checklist-form">
+            <div id="cl-location-badge" class="location-badge">위치 설정 중...</div>
+            <button type="button" id="cl-reset-location" class="reset-location-btn">📍 위치 다시 설정하기</button>
+
+            <div class="form-group">
+                <label>타입</label>
+                <div class="cl-type-options" id="cl-type-options">
+                    <button type="button" class="cl-type-chip" data-type="CAFE">☕ 카페</button>
+                    <button type="button" class="cl-type-chip" data-type="FOOD">🍴 식당</button>
+                    <button type="button" class="cl-type-chip" data-type="SPOT">📍 명소</button>
+                    <button type="button" class="cl-type-chip" data-type="ETC">✨ 기타</button>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>제목</label>
+                <input type="text" id="cl-title" placeholder="가볼 곳 이름" required>
+            </div>
+            <div class="form-group">
+                <label>내용</label>
+                <textarea id="cl-content" placeholder="메모를 남겨보세요" rows="3"></textarea>
+            </div>
+            <div class="form-group cl-visited-group">
+                <label class="cl-check-label">
+                    <input type="checkbox" id="cl-visited"> 다녀왔어요
+                </label>
+                <input type="date" id="cl-visited-date" disabled>
+            </div>
+            <div class="form-group">
+                <label>사진 (선택)</label>
+                <input type="file" id="cl-image" accept="image/*" class="cl-file-input">
+            </div>
+            <button type="submit" class="submit-btn">추가하기 📌</button>
+        </form>
+    </div>
+</div>
+
+<!-- 가볼곳 상세 조회 모달 -->
+<div id="checklist-detail-modal" class="modal hidden">
+    <div class="modal-content detail-content">
+        <div class="modal-header detail-modal-header">
+            <div id="cl-detail-header-actions" class="detail-header-actions"></div>
+            <button type="button" class="close-modal" onclick="closeChecklistDetail()">&times;</button>
+        </div>
+
+        <div id="cl-detail-view"></div>
+
+        <!-- 수정 영역 (본인 가볼곳만 · 위치 제외 / 사진 변경 가능) -->
+        <form id="cl-edit-form" class="hidden">
+            <div class="cl-edit-loc-wrap">
+                <span class="meta-item edit-loc-line" id="cl-edit-loc">📍</span>
+            </div>
+            <div class="form-group">
+                <label>사진</label>
+                <div class="cl-edit-image-wrap hidden" id="cl-edit-image-wrap">
+                    <img src="" alt="가볼곳 사진" id="cl-edit-image">
+                </div>
+                <input type="file" id="cl-edit-image-file" accept="image/*" class="cl-file-input">
+                <p class="cl-img-hint">새 사진을 선택하면 기존 사진이 교체돼요.</p>
+            </div>
+            <div class="form-group">
+                <label>타입</label>
+                <div class="cl-type-options" id="cl-edit-type-options">
+                    <button type="button" class="cl-type-chip" data-type="CAFE">☕ 카페</button>
+                    <button type="button" class="cl-type-chip" data-type="FOOD">🍴 식당</button>
+                    <button type="button" class="cl-type-chip" data-type="SPOT">📍 명소</button>
+                    <button type="button" class="cl-type-chip" data-type="ETC">✨ 기타</button>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>제목</label>
+                <input type="text" id="cl-edit-title" maxlength="60" placeholder="제목" required>
+            </div>
+            <div class="form-group">
+                <label>내용</label>
+                <textarea id="cl-edit-content" rows="4" placeholder="메모"></textarea>
+            </div>
+            <div class="form-group cl-visited-group">
+                <label class="cl-check-label">
+                    <input type="checkbox" id="cl-edit-visited"> 다녀왔어요
+                </label>
+                <input type="date" id="cl-edit-visited-date" disabled>
+            </div>
+            <p class="detail-edit-note">※ 위치는 수정할 수 없어요.</p>
+            <div class="detail-edit-actions">
+                <button type="button" id="cl-edit-cancel" class="cancel-edit-btn">취소</button>
                 <button type="submit" class="submit-btn">저장하기 ✨</button>
             </div>
         </form>

@@ -247,18 +247,24 @@ button { font-family: inherit; }
 .map-wrapper.picking { cursor: crosshair; }
 
 /* ================= 카메라 버튼 ================= */
-.floating-camera-zone { position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 400; }
-.camera-btn {
-    background: var(--primary); color: var(--white); padding: 10px 20px;
-    border-radius: 24px; border: none; font-size: 0.85rem; font-weight: 600;
-    box-shadow: 0 6px 16px rgba(176, 137, 104, 0.42); cursor: pointer;
+.floating-camera-zone {
+    position: absolute; right: 16px; bottom: 20px; z-index: 400;
+    display: flex; flex-direction: column; align-items: flex-end; gap: 10px;
+    transition: opacity 0.25s;
+}
+.map-fab {
+    background: var(--primary); color: var(--white); padding: 9px 14px;
+    border-radius: 22px; border: none; font-size: 0.78rem; font-weight: 600;
+    white-space: nowrap; box-shadow: 0 6px 16px rgba(176, 137, 104, 0.42); cursor: pointer;
     transition: transform 0.18s var(--ease-spring), box-shadow 0.2s;
 }
-.camera-btn:hover { box-shadow: 0 10px 26px rgba(176, 137, 104, 0.55); transform: translateY(-2px); }
-.camera-btn:active { transform: scale(0.94); }
-/* 위치 선택 모드일 땐 카메라 버튼 숨김 */
+.map-fab:hover { box-shadow: 0 10px 26px rgba(176, 137, 104, 0.55); transform: translateY(-2px); }
+.map-fab:active { transform: scale(0.94); }
+/* 토글 버튼은 살짝 옅은 톤으로 구분 */
+.toggle-fab { background: var(--white); color: var(--primary-dark); border: 1px solid var(--primary-light); }
+.toggle-fab:hover { background: var(--primary-light); }
+/* 위치 선택 모드일 땐 버튼 숨김 */
 .location-mode:not(.hidden) ~ .floating-camera-zone { opacity: 0; pointer-events: none; }
-.floating-camera-zone { transition: opacity 0.25s; }
 
 /* ================= 타임라인 & 프로필 ================= */
 .content-wrapper { padding: 24px 20px 40px; max-width: 600px; margin: 0 auto; }
@@ -571,10 +577,43 @@ input[type="date"]::-webkit-date-and-time-value {
     80%      { transform: translateX(2px)  rotate(2deg); }
 }
 .custom-marker.marker-shake,
-.marker-heart.marker-shake {
+.marker-heart.marker-shake,
+.cl-marker.marker-shake {
     animation: markerShake 0.6s ease-in-out;
     transform-origin: center bottom;
     z-index: 30;
+}
+
+/* ---- 가볼곳(체크리스트) 마커: 제목 말풍선 + 타입색 + 방문표시 ---- */
+.cl-marker {
+    --cl-color: #7a756e;
+    position: relative; display: inline-flex; align-items: center; gap: 5px;
+    max-width: 160px; padding: 6px 11px;
+    background: var(--cl-color); color: #fff;
+    border-radius: 16px; font-size: 0.78rem; font-weight: 700;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.22);
+    border: 2px solid rgba(255,255,255,0.92);
+    white-space: nowrap; cursor: pointer;
+    animation: markerDrop 0.45s var(--ease-spring);
+    transition: transform 0.18s var(--ease-spring);
+}
+.cl-marker:hover { transform: translateY(-3px) scale(1.05); z-index: 12; }
+.cl-marker-emoji { font-size: 0.9rem; line-height: 1; flex-shrink: 0; }
+.cl-marker-title { overflow: hidden; text-overflow: ellipsis; max-width: 116px; }
+/* 말풍선 꼬리 (아래 방향) */
+.cl-marker-tail {
+    position: absolute; bottom: -7px; left: 18px; width: 0; height: 0;
+    border-left: 7px solid transparent; border-right: 7px solid transparent;
+    border-top: 8px solid var(--cl-color);
+}
+/* 방문 완료: 체크 배지 */
+.cl-marker.visited { opacity: 0.9; }
+.cl-marker .cl-marker-check {
+    position: absolute; top: -9px; right: -9px;
+    width: 20px; height: 20px; border-radius: 50%;
+    background: #2e9e5b; color: #fff; font-size: 0.72rem; font-weight: 800;
+    display: flex; align-items: center; justify-content: center;
+    border: 2px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,0.25);
 }
 
 /* ================= 토스트 ================= */
@@ -821,6 +860,16 @@ input[type="date"]::-webkit-date-and-time-value {
     background-size: cover; background-position: center; background-repeat: no-repeat;
     border-radius: 12px; background-color: var(--gray-100);
 }
+
+/* ---- 이미지 없음 자리표시 (썸네일과 동일 규격) ---- */
+.thumb-empty {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+    background: repeating-linear-gradient(45deg, var(--gray-50), var(--gray-50) 8px, var(--gray-100) 8px, var(--gray-100) 16px);
+    border: 1px dashed var(--gray-200);
+    color: var(--gray-400);
+}
+.thumb-empty .thumb-empty-icon { font-size: 1.2rem; opacity: 0.55; line-height: 1; }
+.thumb-empty .thumb-empty-text { font-size: 0.64rem; font-weight: 600; letter-spacing: -0.2px; }
 
 /* ---- 마커 사진(배경 방식: 줌 시 깜빡임 방지) ---- */
 .custom-marker .cm-photo {
@@ -1184,3 +1233,238 @@ input[type="date"]::-webkit-date-and-time-value {
 .pe-btn:hover { background: var(--primary-light); color: var(--primary-dark); }
 .pe-btn:active { transform: scale(0.97); }
 .pe-hint { text-align: center; font-size: 0.8rem; color: var(--gray-400); margin-bottom: 14px; }
+
+/* =========================================================
+   가볼곳(체크리스트) — 목록 카드 / 작성·수정 폼 / 상세
+   ========================================================= */
+
+/* ---- 가볼곳 목록 카드 ---- */
+#checklist-feed { display: flex; flex-direction: column; gap: 10px; padding-top: 4px; }
+.cl-card {
+    position: relative;
+    display: flex; align-items: stretch; gap: 14px;
+    background: var(--white); border: 1px solid var(--gray-200);
+    border-radius: 16px; padding: 14px 16px;
+    box-shadow: var(--shadow-sm); cursor: pointer; text-align: left;
+    transition: transform 0.15s ease, box-shadow 0.2s ease;
+    animation: cardIn 0.4s var(--ease-soft) both;
+}
+.cl-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+.cl-card.visited { background: #f7faf7; }
+.cl-card-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.cl-card-tags { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-bottom: 2px; }
+.cl-type-tag {
+    --cl-color: #7a756e;
+    display: inline-flex; align-items: center; gap: 4px;
+    background: color-mix(in srgb, var(--cl-color) 14%, #fff);
+    color: var(--cl-color);
+    font-size: 0.74rem; font-weight: 700;
+    padding: 3px 10px; border-radius: 20px;
+}
+.cl-card-title {
+    font-size: 1.0rem; font-weight: 700; color: var(--gray-800); line-height: 1.35;
+    display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden;
+}
+.cl-card-text {
+    font-size: 0.86rem; color: var(--gray-600); line-height: 1.55;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.cl-card-loc {
+    font-size: 0.78rem; color: var(--gray-500); margin-top: 2px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* 인라인 배지(썸네일과 겹치지 않도록 절대배치 제거) */
+.cl-visited-badge, .cl-todo-badge {
+    font-size: 0.72rem; font-weight: 700; padding: 4px 9px; border-radius: 20px;
+}
+.cl-visited-badge { background: #e3f3e8; color: #2e7d4f; }
+.cl-todo-badge { background: var(--primary-light); color: var(--primary-dark); }
+/* 가볼곳 썸네일 (타임라인과 동일 규격) */
+.cl-thumb {
+    flex: 0 0 84px; width: 84px; align-self: stretch; min-height: 84px;
+    background-size: cover; background-position: center; background-repeat: no-repeat;
+    border-radius: 12px; background-color: var(--gray-100);
+}
+
+/* ---- 타입 선택 칩 (작성/수정 폼 공용) ---- */
+.cl-type-options { display: flex; flex-wrap: wrap; gap: 8px; }
+.cl-type-chip {
+    --cl-color: #7a756e;
+    border: 1.5px solid var(--gray-200); background: var(--white); color: var(--gray-600);
+    font-size: 0.82rem; font-weight: 600; padding: 7px 13px; border-radius: 20px;
+    cursor: pointer; font-family: var(--font-main); transition: all 0.15s ease;
+}
+.cl-type-chip:hover { border-color: var(--cl-color); }
+.cl-type-chip.selected {
+    background: var(--cl-color); color: #fff; border-color: var(--cl-color);
+    box-shadow: 0 3px 10px color-mix(in srgb, var(--cl-color) 40%, transparent);
+}
+
+/* ---- 방문 체크 + 날짜 ---- */
+.cl-visited-group { display: flex; flex-direction: column; align-items: stretch; gap: 10px; }
+/* '다녀왔어요'를 제목 입력칸과 같은 크기의 풀폭 박스로 — 클릭하면 박스 전체가 연두색 */
+.cl-check-label {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    width: 100%; padding: 12px 14px;
+    border: 1px solid var(--gray-200); border-radius: 12px;
+    background: var(--gray-50); color: var(--gray-600);
+    font-size: 0.95rem; font-weight: 700; cursor: pointer; user-select: none;
+    transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
+}
+.cl-check-label:hover { border-color: #9bd96a; }
+/* 실제 체크박스는 숨기고 박스 클릭으로 토글 (라벨이 감싸고 있어 동작 유지) */
+.cl-check-label input[type="checkbox"] { display: none; }
+/* 체크됨 → 박스 전체 연두색 */
+.cl-check-label.checked {
+    background: #8ed94f; border-color: #6fbf3a; color: #fff;
+    box-shadow: 0 0 0 4px rgba(142, 217, 79, 0.28);
+}
+.cl-check-label.checked::before { content: '✓'; font-weight: 800; }
+.cl-visited-group input[type="date"]:disabled { opacity: 0.45; cursor: not-allowed; }
+.cl-file-input { font-size: 0.85rem; }
+
+/* ---- 가볼곳 상세 ---- */
+.cl-type-tag-lg { font-size: 0.82rem; padding: 5px 13px; margin-bottom: 10px; align-self: flex-start; }
+.cl-meta-visited { background: #e3f3e8; color: #2e7d4f; }
+.cl-meta-todo { background: var(--primary-light); color: var(--primary-dark); }
+.cl-edit-loc-wrap { margin-bottom: 14px; }
+
+/* =========================================================
+   타임라인 검색바 / 가볼곳 카테고리 필터 / 가볼곳 사진 수정
+   ========================================================= */
+
+/* ---- 섹션 제목 + 검색 토글 ---- */
+.section-head-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.filter-toggle-btn {
+    background: var(--white); color: var(--primary-dark);
+    border: 1px solid var(--primary-light); border-radius: 20px;
+    padding: 6px 13px; font-size: 0.8rem; font-weight: 600; cursor: pointer;
+    font-family: var(--font-main); transition: all 0.15s ease;
+}
+.filter-toggle-btn:hover { background: var(--primary-light); }
+
+/* ---- 타임라인 검색바 ---- */
+.filter-bar {
+    display: flex; flex-direction: column; gap: 9px;
+    background: var(--white); border: 1px solid var(--gray-200);
+    border-radius: 14px; padding: 12px; margin: 10px 0 6px;
+    box-shadow: var(--shadow-sm);
+    animation: dropIn 0.28s var(--ease-soft);
+}
+.filter-bar input[type="text"],
+.filter-bar input[type="date"] {
+    width: 100%; border: 1px solid var(--gray-200); border-radius: 10px;
+    padding: 10px 12px; font-size: 0.9rem; font-family: var(--font-main);
+    background: var(--gray-50); color: var(--gray-800);
+}
+.filter-bar input:focus { outline: none; border-color: var(--primary); background: var(--white); }
+.filter-bar-actions { display: flex; gap: 8px; }
+.filter-search-btn, .filter-reset-btn {
+    flex: 1; border: none; border-radius: 10px; padding: 10px;
+    font-size: 0.88rem; font-weight: 600; cursor: pointer; font-family: var(--font-main);
+    transition: all 0.15s ease;
+}
+.filter-search-btn { background: var(--primary); color: #fff; }
+.filter-search-btn:hover { background: var(--primary-dark); }
+.filter-reset-btn { flex: 0 0 80px; background: var(--gray-100); color: var(--gray-600); }
+.filter-reset-btn:hover { background: var(--gray-200); }
+
+/* ---- 가볼곳 카테고리 필터 칩 ---- */
+.cl-filter-bar {
+    display: flex; gap: 8px; margin: 4px 0 12px; padding-bottom: 4px;
+    overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none;
+}
+.cl-filter-bar::-webkit-scrollbar { display: none; }
+.cl-filter-chip {
+    flex-shrink: 0; border: 1.5px solid var(--gray-200); background: var(--white);
+    color: var(--gray-600); font-size: 0.82rem; font-weight: 600;
+    padding: 7px 14px; border-radius: 20px; cursor: pointer;
+    font-family: var(--font-main); transition: all 0.15s ease;
+}
+.cl-filter-chip:hover { border-color: var(--primary-light); }
+.cl-filter-chip.selected {
+    background: var(--primary); color: #fff; border-color: var(--primary);
+    box-shadow: 0 3px 10px rgba(176, 137, 104, 0.4);
+}
+
+/* ---- 가볼곳 수정: 사진 미리보기 ---- */
+.cl-edit-image-wrap {
+    width: 100%; border-radius: 14px; overflow: hidden;
+    background: var(--gray-100); margin-bottom: 8px;
+}
+.cl-edit-image-wrap img {
+    width: 100%; height: auto; max-height: 45vh; object-fit: contain;
+    image-orientation: from-image; display: block;
+}
+.cl-img-hint { font-size: 0.76rem; color: var(--gray-400); margin-top: 6px; }
+
+/* =========================================================
+   타임라인 장소 라디오 필터 / 가볼곳 방문여부 필터
+   ========================================================= */
+
+/* ---- 검색바 필드 라벨 ---- */
+.filter-field { display: flex; flex-direction: column; gap: 7px; }
+.filter-label { font-size: 0.8rem; font-weight: 700; color: var(--primary-dark); }
+
+/* ---- 장소 라디오 칩 ---- */
+.radio-chip-row {
+    display: flex; flex-wrap: wrap; gap: 7px;
+    max-height: 132px; overflow-y: auto;
+}
+.radio-chip {
+    display: inline-flex; align-items: center;
+    border: 1.5px solid var(--gray-200); background: var(--white); color: var(--gray-600);
+    font-size: 0.82rem; font-weight: 600; padding: 6px 12px; border-radius: 20px;
+    cursor: pointer; transition: all 0.15s ease; white-space: nowrap;
+}
+.radio-chip input[type="radio"] { position: absolute; opacity: 0; width: 0; height: 0; }
+.radio-chip:hover { border-color: var(--primary-light); }
+.radio-chip.selected {
+    background: var(--primary); color: #fff; border-color: var(--primary);
+    box-shadow: 0 3px 10px rgba(176, 137, 104, 0.4);
+}
+
+/* ---- 가볼곳 방문여부 필터 칩 ---- */
+.cl-visited-filter { margin-top: -4px; margin-bottom: 12px; }
+.cl-vfilter-chip {
+    flex-shrink: 0; border: 1.5px solid var(--gray-200); background: var(--white);
+    color: var(--gray-600); font-size: 0.82rem; font-weight: 600;
+    padding: 7px 14px; border-radius: 20px; cursor: pointer;
+    font-family: var(--font-main); transition: all 0.15s ease;
+}
+.cl-vfilter-chip:hover { border-color: #9bd96a; }
+.cl-vfilter-chip.selected {
+    background: #6fbf3a; color: #fff; border-color: #6fbf3a;
+    box-shadow: 0 3px 10px rgba(111, 191, 58, 0.34);
+}
+
+/* =========================================================
+   장소 콤보박스 / 유저별 체크리스트 스탯 / 로그아웃 버튼
+   ========================================================= */
+
+/* ---- 타임라인 장소 콤보박스 ---- */
+.filter-select {
+    width: 100%; border: 1px solid var(--gray-200); border-radius: 10px;
+    padding: 10px 36px 10px 12px; font-size: 0.9rem; font-family: var(--font-main);
+    background-color: var(--gray-50); color: var(--gray-800); cursor: pointer;
+    -webkit-appearance: none; appearance: none;
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239c6644' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 12px center; background-size: 16px;
+}
+.filter-select:focus { outline: none; border-color: var(--primary); background-color: var(--white); }
+
+/* ---- 유저별 체크리스트 스탯 카드 ---- */
+.cl-stats-grid { margin-top: -10px; }
+.stat-cl .stat-num { color: var(--primary); }
+.stat-cl .stat-label { font-weight: 600; color: var(--primary-dark); }
+
+/* ---- 로그아웃 버튼 (휴지통 아래) ---- */
+.logout-menu-btn {
+    display: block; width: 100%; margin-top: 10px;
+    background: var(--white); color: var(--gray-600);
+    border: 1px solid var(--gray-200); border-radius: 14px;
+    padding: 14px; font-size: 0.95rem; font-weight: 600;
+    font-family: var(--font-main); cursor: pointer; transition: all 0.2s ease;
+}
+.logout-menu-btn:hover { background: var(--gray-50); color: #b5462f; border-color: #e9d2cb; }
+.logout-menu-btn:active { transform: scale(0.98); }
