@@ -1088,20 +1088,22 @@ input[type="date"]::-webkit-date-and-time-value {
 /* 댓글 프로필도 확대 가능 표시 */
 .c-avatar { cursor: zoom-in; }
 
-/* ---- 당겨서 새로고침 인디케이터 (배경 없이 큰 원형 스피너만) ---- */
+/* ---- 당겨서 새로고침 인디케이터 (당긴 만큼 채워지는 원형 게이지) ---- */
 #ptr-indicator {
     position: fixed; top: 0; left: 50%;
     transform: translateX(-50%) translateY(-44px);
     z-index: 3000; width: 34px; height: 34px;
     background: transparent; box-shadow: none;
-    display: flex; align-items: center; justify-content: center;
     pointer-events: none; will-change: transform, opacity;
 }
-.ptr-spinner {
-    width: 30px; height: 30px; border-radius: 50%;
-    border: 3px solid rgba(176, 137, 104, 0.25); border-top-color: var(--primary);
+.ptr-ring { width: 100%; height: 100%; transform: rotate(-90deg); display: block; }
+.ptr-bg { fill: none; stroke: rgba(176, 137, 104, 0.18); stroke-width: 3.5; }
+.ptr-fg {
+    fill: none; stroke: var(--primary); stroke-width: 3.5; stroke-linecap: round;
+    transition: stroke-dashoffset 0.05s linear;
 }
-#ptr-indicator.spinning .ptr-spinner { animation: ptrSpin 0.7s linear infinite; }
+/* 새로고침 중: 빙글빙글 회전 (게이지 길이/오프셋은 JS가 제어) */
+#ptr-indicator.spinning .ptr-ring { animation: ptrSpin 0.7s linear infinite; }
 @keyframes ptrSpin { to { transform: rotate(360deg); } }
 
 /* 가로 드래그 잠금 — 타임라인/내 정보/리스트는 세로 스크롤만 */

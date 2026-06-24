@@ -847,30 +847,45 @@ document.addEventListener('DOMContentLoaded', () => {
     if (retakeBtn) retakeBtn.addEventListener('click', () => { openCameraCapture(true); });
 
     // ==========================================
-    //  당겨서 새로고침 (Pull to refresh) — 콘텐츠가 손가락을 따라 내려오는 방식
+    //  당겨서 새로고침 (Pull to refresh) — 당긴 만큼 원형 게이지가 채워짐
     // ==========================================
+    const PTR_C = 2 * Math.PI * 15; // 진행 링 둘레 (r=15)
     const ptrIndicator = document.createElement('div');
     ptrIndicator.id = 'ptr-indicator';
-    ptrIndicator.innerHTML = '<div class="ptr-spinner"></div>';
+    ptrIndicator.innerHTML =
+        '<svg class="ptr-ring" viewBox="0 0 36 36">' +
+        '<circle class="ptr-bg" cx="18" cy="18" r="15"></circle>' +
+        '<circle class="ptr-fg" cx="18" cy="18" r="15"></circle>' +
+        '</svg>';
     ptrIndicator.style.display = 'none';
     document.body.appendChild(ptrIndicator);
-    const ptrSpin = ptrIndicator.querySelector('.ptr-spinner');
+    const ptrFg = ptrIndicator.querySelector('.ptr-fg');
+    ptrFg.style.strokeDasharray = PTR_C;
+    ptrFg.style.strokeDashoffset = PTR_C;
 
-    const PTR_THRESHOLD = 64;
+    const PTR_THRESHOLD = 70;
+
+    function ptrSetProgress(p) {
+        // p: 0~1 → 링이 그만큼 채워짐
+        ptrFg.style.strokeDashoffset = PTR_C * (1 - Math.max(0, Math.min(1, p)));
+    }
 
     function attachPullToRefresh(scrollEl, isEnabled, onRefresh) {
         if (!scrollEl) return;
         let startY = 0, pulling = false, dist = 0, busy = false, baseTop = 0;
 
         function setVisual(d, instant) {
-            const t = instant ? 'none' : 'transform 0.3s var(--ease-soft)';
+            const t = instant ? 'none' : 'transform 0.32s var(--ease-soft)';
             scrollEl.style.transition = t;
-            ptrIndicator.style.transition = instant ? 'none' : 'transform 0.3s var(--ease-soft), opacity 0.3s ease';
+            ptrIndicator.style.transition = instant ? 'none' : 'transform 0.32s var(--ease-soft), opacity 0.3s ease';
+            // 콘텐츠는 당긴 만큼 제한 없이 따라 내려옴
             scrollEl.style.transform = d > 0 ? ('translateY(' + d + 'px)') : '';
-            ptrIndicator.style.transform = 'translateX(-50%) translateY(' + (baseTop + Math.max(d - 38, -38) - 26) + 'px)';
-            ptrIndicator.style.opacity = d > 6 ? Math.min(d / PTR_THRESHOLD, 1) : 0;
+            // 아이콘은 위쪽에 높게 고정되며 살짝만 따라 내려옴
+            const iconY = baseTop - 34 + Math.min(d, 24);
+            ptrIndicator.style.transform = 'translateX(-50%) translateY(' + iconY + 'px)';
+            ptrIndicator.style.opacity = d > 4 ? Math.min(d / 28, 1) : 0;
             if (!ptrIndicator.classList.contains('spinning')) {
-                ptrSpin.style.transform = 'rotate(' + (d * 3.2) + 'deg)';
+                ptrSetProgress(d / PTR_THRESHOLD);
             }
         }
 
@@ -879,42 +894,51 @@ document.addEventListener('DOMContentLoaded', () => {
             startY = e.touches[0].clientY; pulling = true; dist = 0;
             baseTop = scrollEl.getBoundingClientRect().top + 6;
             ptrIndicator.style.display = '';
+            ptrIndicator.classList.remove('spinning');
+            ptrFg.style.transition = 'stroke-dashoffset 0.05s linear';
+            ptrFg.style.strokeDasharray = PTR_C;
         }, { passive: true });
 
         scrollEl.addEventListener('touchmove', (e) => {
             if (!pulling || busy) return;
             const dy = e.touches[0].clientY - startY;
             if (dy <= 0 || scrollEl.scrollTop > 0) { dist = 0; setVisual(0, true); pulling = (dy > 0); return; }
-            // 당긴 거리에 비례(저항감 적용)해서 콘텐츠가 따라 내려옴
-            dist = Math.min(dy * 0.5, 110);
+            // 제한 없이 당긴 만큼(가벼운 저항감) 따라옴
+            dist = dy * 0.6;
             setVisual(dist, true);
-            if (dy > 6 && e.cancelable) e.preventDefault();
+            if (dy > 5 && e.cancelable) e.preventDefault();
         }, { passive: false });
 
         const finish = () => {
             if (!pulling || busy) return;
             pulling = false;
             if (dist >= PTR_THRESHOLD) {
+                // 게이지가 다 찼을 때 놓으면 → 새로고침 (스피너 회전)
                 busy = true;
-                baseTop = baseTop; // 유지
-                // 새로고침 위치에 고정 + 아이콘 회전 시작
-                scrollEl.style.transition = 'transform 0.3s var(--ease-soft)';
-                ptrIndicator.style.transition = 'transform 0.3s var(--ease-soft)';
-                scrollEl.style.transform = 'translateY(56px)';
-                ptrIndicator.style.transform = 'translateX(-50%) translateY(' + (baseTop - 8) + 'px)';
+                ptrSetProgress(1);
+                scrollEl.style.transition = 'transform 0.32s var(--ease-soft)';
+                ptrIndicator.style.transition = 'transform 0.32s var(--ease-soft)';
+                scrollEl.style.transform = 'translateY(58px)';
+                ptrIndicator.style.transform = 'translateX(-50%) translateY(' + (baseTop - 12) + 'px)';
                 ptrIndicator.style.opacity = 1;
                 ptrIndicator.classList.add('spinning');
-                ptrSpin.style.transform = '';
+                // 회전 인디케이터용 짧은 호(arc)로 전환
+                ptrFg.style.transition = 'none';
+                ptrFg.style.strokeDasharray = '24 ' + (PTR_C - 24);
+                ptrFg.style.strokeDashoffset = '0';
                 Promise.resolve().then(onRefresh).finally(() => {
                     setTimeout(() => {
                         ptrIndicator.classList.remove('spinning');
+                        // 게이지 원복
+                        ptrFg.style.transition = 'stroke-dashoffset 0.05s linear';
+                        ptrFg.style.strokeDasharray = PTR_C;
                         setVisual(0, false);   // 화면이 다시 위로 올라가며 복귀
-                        setTimeout(() => { ptrIndicator.style.display = 'none'; busy = false; }, 320);
+                        setTimeout(() => { ptrIndicator.style.display = 'none'; busy = false; }, 340);
                     }, 500);
                 });
             } else {
                 setVisual(0, false);
-                setTimeout(() => { if (!busy) ptrIndicator.style.display = 'none'; }, 320);
+                setTimeout(() => { if (!busy) ptrIndicator.style.display = 'none'; }, 340);
             }
         };
         scrollEl.addEventListener('touchend', finish);
