@@ -1088,18 +1088,18 @@ input[type="date"]::-webkit-date-and-time-value {
 /* 댓글 프로필도 확대 가능 표시 */
 .c-avatar { cursor: zoom-in; }
 
-/* ---- 당겨서 새로고침 인디케이터 (콘텐츠와 함께 내려옴) ---- */
+/* ---- 당겨서 새로고침 인디케이터 (배경 없이 큰 원형 스피너만) ---- */
 #ptr-indicator {
     position: fixed; top: 0; left: 50%;
     transform: translateX(-50%) translateY(-44px);
-    z-index: 3000; width: 38px; height: 38px; border-radius: 50%;
-    background: var(--white); box-shadow: var(--shadow-md);
+    z-index: 3000; width: 34px; height: 34px;
+    background: transparent; box-shadow: none;
     display: flex; align-items: center; justify-content: center;
     pointer-events: none; will-change: transform, opacity;
 }
 .ptr-spinner {
-    width: 19px; height: 19px; border-radius: 50%;
-    border: 2.5px solid var(--gray-200); border-top-color: var(--primary);
+    width: 30px; height: 30px; border-radius: 50%;
+    border: 3px solid rgba(176, 137, 104, 0.25); border-top-color: var(--primary);
 }
 #ptr-indicator.spinning .ptr-spinner { animation: ptrSpin 0.7s linear infinite; }
 @keyframes ptrSpin { to { transform: rotate(360deg); } }

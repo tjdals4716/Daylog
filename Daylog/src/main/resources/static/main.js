@@ -867,7 +867,7 @@ document.addEventListener('DOMContentLoaded', () => {
             scrollEl.style.transition = t;
             ptrIndicator.style.transition = instant ? 'none' : 'transform 0.3s var(--ease-soft), opacity 0.3s ease';
             scrollEl.style.transform = d > 0 ? ('translateY(' + d + 'px)') : '';
-            ptrIndicator.style.transform = 'translateX(-50%) translateY(' + (baseTop + Math.max(d - 38, -38)) + 'px)';
+            ptrIndicator.style.transform = 'translateX(-50%) translateY(' + (baseTop + Math.max(d - 38, -38) - 26) + 'px)';
             ptrIndicator.style.opacity = d > 6 ? Math.min(d / PTR_THRESHOLD, 1) : 0;
             if (!ptrIndicator.classList.contains('spinning')) {
                 ptrSpin.style.transform = 'rotate(' + (d * 3.2) + 'deg)';
@@ -901,7 +901,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 scrollEl.style.transition = 'transform 0.3s var(--ease-soft)';
                 ptrIndicator.style.transition = 'transform 0.3s var(--ease-soft)';
                 scrollEl.style.transform = 'translateY(56px)';
-                ptrIndicator.style.transform = 'translateX(-50%) translateY(' + (baseTop + 18) + 'px)';
+                ptrIndicator.style.transform = 'translateX(-50%) translateY(' + (baseTop - 8) + 'px)';
                 ptrIndicator.style.opacity = 1;
                 ptrIndicator.classList.add('spinning');
                 ptrSpin.style.transform = '';
