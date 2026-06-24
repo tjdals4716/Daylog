@@ -298,22 +298,63 @@ document.addEventListener('DOMContentLoaded', () => {
         loadMemoriesFromServer();
     }
 
-    // --- 위치 선택 모드 ---
+    // --- 위치 선택 모드 (지도 중앙 점 기준) ---
+    let mapIdleListener = null;
+    let centerLabelTimer = null;
+
     function enterPickMode() {
         isWaitingForMapClick = true;
         locationMode.classList.remove('hidden');
         mapWrapper.classList.add('picking');
 
+        // 지도를 탭하면 그 지점으로 중앙(점)을 이동 — 확정은 버튼으로
         if (mapClickListener) naver.maps.Event.removeListener(mapClickListener);
         mapClickListener = naver.maps.Event.addListener(map, 'click', (event) => {
             if (!isWaitingForMapClick) return;
-            // 클릭 좌표는 정확한 상세 위치
-            currentLatLng = { lat: event.coord.lat(), lng: event.coord.lng() };
-            reverseGeocodeAndLabel(currentLatLng.lat, currentLatLng.lng, '🎯');
-            exitPickMode();
-            pickReturnsToForm = false;
-            openMemoryModal();
+            map.panTo(event.coord);
         });
+
+        // 지도 이동/줌이 멈출 때마다 중앙 점의 주소를 표시
+        if (mapIdleListener) naver.maps.Event.removeListener(mapIdleListener);
+        mapIdleListener = naver.maps.Event.addListener(map, 'idle', () => {
+            clearTimeout(centerLabelTimer);
+            centerLabelTimer = setTimeout(updateCenterLabel, 250);
+        });
+        updateCenterLabel();
+    }
+
+    // 지도 중앙 점의 좌표 → 주소를 배너에 표시
+    function updateCenterLabel() {
+        if (!isWaitingForMapClick || !map) return;
+        const label = document.getElementById('lm-center-label');
+        const c = map.getCenter();
+        if (!c) return;
+        if (label) label.innerHTML = '<span class="lm-pin">📍</span> 위치 확인 중…';
+        if (!(window.naver && naver.maps.Service && naver.maps.Service.reverseGeocode)) {
+            if (label) label.innerHTML = '<span class="lm-pin">📍</span> 중앙 지점을 선택해주세요';
+            return;
+        }
+        naver.maps.Service.reverseGeocode({
+            coords: c,
+            orders: [naver.maps.Service.OrderType.ROAD_ADDR, naver.maps.Service.OrderType.ADDR].join(',')
+        }, (status, response) => {
+            if (!isWaitingForMapClick) return;
+            let addr = '중앙 지점을 선택해주세요';
+            if (status === naver.maps.Service.Status.OK) {
+                const r = response.v2;
+                addr = (r && r.address) ? (r.address.roadAddress || r.address.jibunAddress || addr) : addr;
+            }
+            if (label) label.innerHTML = '<span class="lm-pin">📍</span> ' + escapeHtml(addr);
+        });
+    }
+
+    // 좌표를 최종 확정 → 작성 폼으로 (중앙 점 / 현재 위치 공통)
+    function confirmLocation(lat, lng, prefix) {
+        currentLatLng = { lat: lat, lng: lng };
+        reverseGeocodeAndLabel(lat, lng, prefix || '🎯');
+        exitPickMode();
+        pickReturnsToForm = false;
+        openMemoryModal();
     }
 
     // 좌표 → 상세 주소 (역지오코딩)로 배지 문구 채우기
@@ -364,7 +405,37 @@ document.addEventListener('DOMContentLoaded', () => {
         const sg = document.getElementById('lm-suggestions');
         if (sg) { sg.classList.add('hidden'); sg.innerHTML = ''; }
         if (mapClickListener) { naver.maps.Event.removeListener(mapClickListener); mapClickListener = null; }
+        if (mapIdleListener) { naver.maps.Event.removeListener(mapIdleListener); mapIdleListener = null; }
+        clearTimeout(centerLabelTimer);
     }
+
+    // '이 위치로 설정하기' — 지도 중앙 점을 위치로 확정
+    const lmConfirmBtn = document.getElementById('lm-confirm');
+    if (lmConfirmBtn) lmConfirmBtn.addEventListener('click', () => {
+        if (!map) return;
+        const c = map.getCenter();
+        confirmLocation(c.lat(), c.lng(), '🎯');
+    });
+
+    // '현재 위치로 설정' — 현재 GPS 위치로 지도 중앙을 이동
+    const lmCurrentBtn = document.getElementById('lm-current');
+    if (lmCurrentBtn) lmCurrentBtn.addEventListener('click', () => {
+        if (!navigator.geolocation) { showToast('위치 기능을 사용할 수 없어요'); return; }
+        lmCurrentBtn.disabled = true;
+        const prev = lmCurrentBtn.innerText;
+        lmCurrentBtn.innerText = '현재 위치 찾는 중…';
+        navigator.geolocation.getCurrentPosition((pos) => {
+            lmCurrentBtn.disabled = false; lmCurrentBtn.innerText = prev;
+            const lat = pos.coords.latitude, lng = pos.coords.longitude;
+            if (map) { map.setCenter(new naver.maps.LatLng(lat, lng)); map.setZoom(16); }
+            updateCenterLabel();
+            showToast("현재 위치로 이동했어요. '이 위치로 설정하기'를 눌러 확정하세요.");
+        }, (err) => {
+            lmCurrentBtn.disabled = false; lmCurrentBtn.innerText = prev;
+            console.warn('현재 위치 실패:', err);
+            showToast('위치 접근이 거부되었어요. 지도를 움직여 설정해주세요.');
+        }, { enableHighAccuracy: true, timeout: 8000 });
+    });
 
     document.getElementById('lm-cancel').addEventListener('click', () => {
         exitPickMode();
@@ -640,7 +711,11 @@ document.addEventListener('DOMContentLoaded', () => {
             camStream = await navigator.mediaDevices.getUserMedia({
                 video: { facingMode: camFacing }, audio: false
             });
-            if (camVideo) { camVideo.srcObject = camStream; }
+            if (camVideo) {
+                camVideo.srcObject = camStream;
+                // 전면(셀피) 카메라가 거울처럼 반전되어 보이는 것을 방지 → 일반 방향으로 표시
+                camVideo.style.transform = (camFacing === 'user') ? 'scaleX(-1)' : 'none';
+            }
             if (camLoading) camLoading.classList.add('hidden');
         } catch (err) {
             console.warn('카메라 접근 실패 → 파일 입력으로 대체:', err);
@@ -682,7 +757,13 @@ document.addEventListener('DOMContentLoaded', () => {
         canvas.width = camVideo.videoWidth;
         canvas.height = camVideo.videoHeight;
         const ctx = canvas.getContext('2d');
+        // 전면 카메라는 미리보기를 반전 해제했으므로, 저장 사진도 동일하게 좌우 반전 적용
+        if (camFacing === 'user') {
+            ctx.translate(canvas.width, 0);
+            ctx.scale(-1, 1);
+        }
         ctx.drawImage(camVideo, 0, 0, canvas.width, canvas.height);
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
         canvas.toBlob((blob) => {
             if (!blob) { showToast('사진 처리 실패'); return; }
             const file = new File([blob], 'camera_' + Date.now() + '.jpg', { type: 'image/jpeg' });
@@ -758,57 +839,74 @@ document.addEventListener('DOMContentLoaded', () => {
     if (retakeBtn) retakeBtn.addEventListener('click', () => { openCameraCapture(); });
 
     // ==========================================
-    //  당겨서 새로고침 (Pull to refresh)
+    //  당겨서 새로고침 (Pull to refresh) — 콘텐츠가 손가락을 따라 내려오는 방식
     // ==========================================
     const ptrIndicator = document.createElement('div');
     ptrIndicator.id = 'ptr-indicator';
     ptrIndicator.innerHTML = '<div class="ptr-spinner"></div>';
+    ptrIndicator.style.display = 'none';
     document.body.appendChild(ptrIndicator);
+    const ptrSpin = ptrIndicator.querySelector('.ptr-spinner');
 
-    function ptrSet(dist, refreshing) {
-        if (refreshing) {
-            ptrIndicator.classList.add('refreshing', 'visible');
-            ptrIndicator.style.transform = 'translateX(-50%) translateY(46px)';
-            ptrIndicator.querySelector('.ptr-spinner').style.transform = '';
-            return;
-        }
-        ptrIndicator.classList.remove('refreshing');
-        if (dist <= 0) {
-            ptrIndicator.classList.remove('visible');
-            ptrIndicator.style.transform = 'translateX(-50%) translateY(-10px)';
-            return;
-        }
-        ptrIndicator.classList.add('visible');
-        const y = Math.min(dist, 70);
-        ptrIndicator.style.transform = 'translateX(-50%) translateY(' + y + 'px)';
-        ptrIndicator.querySelector('.ptr-spinner').style.transform = 'rotate(' + (dist * 3) + 'deg)';
-    }
+    const PTR_THRESHOLD = 64;
 
     function attachPullToRefresh(scrollEl, isEnabled, onRefresh) {
         if (!scrollEl) return;
-        let startY = 0, pulling = false, dist = 0, busy = false;
+        let startY = 0, pulling = false, dist = 0, busy = false, baseTop = 0;
+
+        function setVisual(d, instant) {
+            const t = instant ? 'none' : 'transform 0.3s var(--ease-soft)';
+            scrollEl.style.transition = t;
+            ptrIndicator.style.transition = instant ? 'none' : 'transform 0.3s var(--ease-soft), opacity 0.3s ease';
+            scrollEl.style.transform = d > 0 ? ('translateY(' + d + 'px)') : '';
+            ptrIndicator.style.transform = 'translateX(-50%) translateY(' + (baseTop + Math.max(d - 38, -38)) + 'px)';
+            ptrIndicator.style.opacity = d > 6 ? Math.min(d / PTR_THRESHOLD, 1) : 0;
+            if (!ptrIndicator.classList.contains('spinning')) {
+                ptrSpin.style.transform = 'rotate(' + (d * 3.2) + 'deg)';
+            }
+        }
+
         scrollEl.addEventListener('touchstart', (e) => {
             if (busy || !isEnabled() || scrollEl.scrollTop > 0) { pulling = false; return; }
             startY = e.touches[0].clientY; pulling = true; dist = 0;
+            baseTop = scrollEl.getBoundingClientRect().top + 6;
+            ptrIndicator.style.display = '';
         }, { passive: true });
+
         scrollEl.addEventListener('touchmove', (e) => {
             if (!pulling || busy) return;
             const dy = e.touches[0].clientY - startY;
-            if (dy <= 0 || scrollEl.scrollTop > 0) { dist = 0; ptrSet(0); pulling = (dy > 0); return; }
-            dist = dy * 0.5;
-            ptrSet(dist);
+            if (dy <= 0 || scrollEl.scrollTop > 0) { dist = 0; setVisual(0, true); pulling = (dy > 0); return; }
+            // 당긴 거리에 비례(저항감 적용)해서 콘텐츠가 따라 내려옴
+            dist = Math.min(dy * 0.5, 110);
+            setVisual(dist, true);
             if (dy > 6 && e.cancelable) e.preventDefault();
         }, { passive: false });
+
         const finish = () => {
-            if (!pulling || busy) { return; }
+            if (!pulling || busy) return;
             pulling = false;
-            if (dist >= 60) {
-                busy = true; ptrSet(0, true);
+            if (dist >= PTR_THRESHOLD) {
+                busy = true;
+                baseTop = baseTop; // 유지
+                // 새로고침 위치에 고정 + 아이콘 회전 시작
+                scrollEl.style.transition = 'transform 0.3s var(--ease-soft)';
+                ptrIndicator.style.transition = 'transform 0.3s var(--ease-soft)';
+                scrollEl.style.transform = 'translateY(56px)';
+                ptrIndicator.style.transform = 'translateX(-50%) translateY(' + (baseTop + 18) + 'px)';
+                ptrIndicator.style.opacity = 1;
+                ptrIndicator.classList.add('spinning');
+                ptrSpin.style.transform = '';
                 Promise.resolve().then(onRefresh).finally(() => {
-                    setTimeout(() => { busy = false; ptrSet(0); }, 700);
+                    setTimeout(() => {
+                        ptrIndicator.classList.remove('spinning');
+                        setVisual(0, false);   // 화면이 다시 위로 올라가며 복귀
+                        setTimeout(() => { ptrIndicator.style.display = 'none'; busy = false; }, 320);
+                    }, 500);
                 });
             } else {
-                ptrSet(0);
+                setVisual(0, false);
+                setTimeout(() => { if (!busy) ptrIndicator.style.display = 'none'; }, 320);
             }
         };
         scrollEl.addEventListener('touchend', finish);
@@ -824,22 +922,30 @@ document.addEventListener('DOMContentLoaded', () => {
         },
         () => {
             const pf = document.getElementById('tab-profile');
-            if (pf && pf.style.display !== 'none') { loadProfiles(); }
-            loadMemoriesFromServer();
-            showToast('새로고침 완료');
+            if (pf && pf.style.display !== 'none') loadProfiles();
+            return Promise.resolve(loadMemoriesFromServer()).then(() => showToast('새로고침했어요'));
         });
 
     // 추억 상세 모달 당겨서 새로고침
     const detailScroll = document.querySelector('#detail-modal .modal-content');
     attachPullToRefresh(detailScroll,
         () => !document.getElementById('detail-modal').classList.contains('hidden') && _detailMemory != null,
-        () => { if (_detailMemory) { loadComments(_detailMemory.id); } loadMemoriesFromServer(); showToast('새로고침 완료'); });
+        () => { if (_detailMemory) loadComments(_detailMemory.id); return Promise.resolve(loadMemoriesFromServer()).then(() => showToast('새로고침했어요')); });
+
+    // '우리의 추억' / '~의 추억' 리스트 모달 당겨서 새로고침 (가로 드래그는 CSS로 잠금)
+    const listScroll = document.querySelector('#list-modal .list-modal-body');
+    attachPullToRefresh(listScroll,
+        () => !document.getElementById('list-modal').classList.contains('hidden'),
+        () => Promise.resolve(loadMemoriesFromServer()).then(() => {
+            if (Daylog._openListKind) openStatList(Daylog._openListKind);
+            showToast('새로고침했어요');
+        }));
 
     // --- 데이터 불러오기 및 렌더링 ---
     function loadMemoriesFromServer() {
-        if (!requireAuthOrRedirect()) return;
+        if (!requireAuthOrRedirect()) return Promise.resolve();
 
-        fetch(`${API_BASE_URL}/api/memories/${currentUid}`, { headers: authHeaders(true) })
+        return fetch(`${API_BASE_URL}/api/memories/${currentUid}`, { headers: authHeaders(true) })
             .then(handleResponse)
             .then(memories => {
                 memoryList = memories || [];
@@ -1136,7 +1242,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function openEditPage() {
-        if (!currentUser) { showToast('사용자 정보를 불러오는 중'); loadProfiles(); return; }
+        if (!currentUser) { showToast('사용자 정보를 불러오는 중이에요'); loadProfiles(); return; }
         editPendingFile = null;
         editRemovePhoto = false;
         document.getElementById('edit-nickname').value = currentUser.nickname || '';
@@ -1158,7 +1264,7 @@ document.addEventListener('DOMContentLoaded', () => {
             editPendingFile = null;
             editRemovePhoto = true;
             setEditAvatar(DEFAULT_AVATAR, false);
-            showToast('저장하면 사진이 제거됩니다');
+            showToast('저장하면 사진이 제거돼요');
         });
     }
 
@@ -1225,23 +1331,34 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- 내 정보 통계 클릭 → 해당 추억 목록 / D-Day 날짜 표시 ---
+    function buildStatList(kind) {
+        if (kind === 'total') return { title: '우리의 추억', items: [...memoryList].sort(sortByDateDesc) };
+        if (kind === 'me') {
+            const u = meUser && meUser.uid;
+            return { title: displayNameOf(meUser, '나') + '의 추억', items: memoryList.filter(m => m.ownerUid === u).sort(sortByDateDesc) };
+        }
+        if (kind === 'partner') {
+            const u = partnerUser && partnerUser.uid;
+            return { title: displayNameOf(partnerUser, '상대방') + '의 추억', items: memoryList.filter(m => m.ownerUid === u).sort(sortByDateDesc) };
+        }
+        return null;
+    }
+    function openStatList(kind) {
+        const b = buildStatList(kind);
+        if (!b) return;
+        Daylog._openListKind = kind; // 새로고침 시 같은 목록 재구성용
+        openMemoryListModal(b.title, b.items);
+    }
+
     function bindStatClicks() {
         const bind = (id, fn) => {
             const el = document.getElementById(id);
             if (el) { el.style.cursor = 'pointer'; el.addEventListener('click', fn); }
         };
-        bind('stat-card-dday', () => showDDayInfo());
-        bind('stat-card-total', () => openMemoryListModal('우리의 추억', [...memoryList].sort(sortByDateDesc)));
-        bind('stat-card-me', () => {
-            const meUid = meUser && meUser.uid;
-            openMemoryListModal(displayNameOf(meUser, '나') + '의 추억',
-                memoryList.filter(m => m.ownerUid === meUid).sort(sortByDateDesc));
-        });
-        bind('stat-card-partner', () => {
-            const pUid = partnerUser && partnerUser.uid;
-            openMemoryListModal(displayNameOf(partnerUser, '상대방') + '의 추억',
-                memoryList.filter(m => m.ownerUid === pUid).sort(sortByDateDesc));
-        });
+        bind('stat-card-dday', () => { Daylog._openListKind = null; showDDayInfo(); });
+        bind('stat-card-total', () => openStatList('total'));
+        bind('stat-card-me', () => openStatList('me'));
+        bind('stat-card-partner', () => openStatList('partner'));
     }
     bindStatClicks();
 
@@ -1301,11 +1418,71 @@ document.addEventListener('DOMContentLoaded', () => {
         closeLightbox();
     });
 
-    // 미리보기 / 상세 이미지 클릭 → 라이트박스 열기 (원본 위치에서 확대)
+    // 미리보기(작성 폼) 클릭 → 자르기/회전 편집기 / 상세 이미지 클릭 → 라이트박스
     const previewImg = document.getElementById('image-preview');
-    if (previewImg) previewImg.addEventListener('click', function () { if (this.src) openLightbox(this.src, this); });
+    if (previewImg) previewImg.addEventListener('click', function () {
+        if (selectedFile) openPhotoEditor(selectedFile, applyEditedPhoto);
+        else if (this.src) openLightbox(this.src, this);
+    });
     const detailImg = document.getElementById('detail-image');
     if (detailImg) detailImg.addEventListener('click', function () { if (this.src) openLightbox(this.src, this); });
+
+    // 편집기에서 적용된 사진을 작성 폼에 반영
+    function applyEditedPhoto(file) {
+        if (!file) return;
+        selectedFile = file;
+        const preview = document.getElementById('image-preview');
+        if (preview) {
+            const url = URL.createObjectURL(file);
+            preview.src = url;
+            preview.classList.remove('hidden');
+        }
+        showToast('편집한 사진을 적용했어요');
+    }
+
+    // ===== 사진 편집기(자르기/회전) 이벤트 =====
+    const peStage = document.getElementById('pe-stage');
+    const peCrop = document.getElementById('pe-crop');
+    if (document.getElementById('pe-cancel')) document.getElementById('pe-cancel').addEventListener('click', closePhotoEditor);
+    if (document.getElementById('pe-apply')) document.getElementById('pe-apply').addEventListener('click', peApply);
+    if (document.getElementById('pe-rotate')) document.getElementById('pe-rotate').addEventListener('click', peRotate);
+    if (document.getElementById('pe-reset')) document.getElementById('pe-reset').addEventListener('click', () => peLayout(true));
+
+    if (peStage && peCrop) {
+        // 핸들(모서리) → 리사이즈 / 박스 본문 → 이동
+        peCrop.querySelectorAll('.pe-handle').forEach(h => {
+            h.addEventListener('pointerdown', (e) => {
+                e.stopPropagation();
+                _ped.drag = { mode: 'resize', corner: h.getAttribute('data-corner'), sx: e.clientX, sy: e.clientY, box0: { ..._ped.crop } };
+                try { peStage.setPointerCapture(e.pointerId); } catch (_) {}
+            });
+        });
+        peCrop.addEventListener('pointerdown', (e) => {
+            if (e.target.classList.contains('pe-handle')) return;
+            _ped.drag = { mode: 'move', sx: e.clientX, sy: e.clientY, box0: { ..._ped.crop } };
+            try { peStage.setPointerCapture(e.pointerId); } catch (_) {}
+        });
+        peStage.addEventListener('pointermove', (e) => {
+            if (!_ped.drag) return;
+            const dx = e.clientX - _ped.drag.sx, dy = e.clientY - _ped.drag.sy;
+            const b0 = _ped.drag.box0;
+            if (_ped.drag.mode === 'move') {
+                _ped.crop.x = b0.x + dx;
+                _ped.crop.y = b0.y + dy;
+            } else {
+                const co = _ped.drag.corner;
+                if (co === 'nw') { _ped.crop.x = b0.x + dx; _ped.crop.y = b0.y + dy; _ped.crop.w = b0.w - dx; _ped.crop.h = b0.h - dy; }
+                else if (co === 'ne') { _ped.crop.y = b0.y + dy; _ped.crop.w = b0.w + dx; _ped.crop.h = b0.h - dy; }
+                else if (co === 'sw') { _ped.crop.x = b0.x + dx; _ped.crop.w = b0.w - dx; _ped.crop.h = b0.h + dy; }
+                else if (co === 'se') { _ped.crop.w = b0.w + dx; _ped.crop.h = b0.h + dy; }
+            }
+            peClampCrop();
+            peApplyCropStyle();
+        });
+        const peEnd = (e) => { _ped.drag = null; try { peStage.releasePointerCapture(e.pointerId); } catch (_) {} };
+        peStage.addEventListener('pointerup', peEnd);
+        peStage.addEventListener('pointercancel', peEnd);
+    }
 
     // ===== 사진 편집(크롭/줌) 이벤트 =====
     const cropStage = document.getElementById('crop-stage');
@@ -1412,7 +1589,7 @@ function openDetailModal(memory) {
     if (headerActions) {
         headerActions.innerHTML = isOwner
             ? '<button type="button" class="detail-edit-btn" id="detail-edit-open">✏️ 수정</button>' +
-            '<button type="button" class="detail-trash-btn" id="detail-trash-open">🗑️</button>'
+              '<button type="button" class="detail-trash-btn" id="detail-trash-open">🗑️</button>'
             : '';
     }
 
@@ -1779,7 +1956,7 @@ function renderTrash(memories, comments) {
 function restoreMemory(id) {
     fetch(`${Daylog.api}/api/memories/${id}/restore`, { method: 'PUT', headers: Daylog.authHeaders(true) })
         .then(Daylog.handleResponse)
-        .then(() => { showToast('복원 완료'); openTrashModal(); Daylog.reload(); })
+        .then(() => { showToast('복원했어요'); openTrashModal(); Daylog.reload(); })
         .catch(err => { console.error(err); showToast('복원 실패'); });
 }
 
@@ -1787,14 +1964,14 @@ function deleteMemoryForever(id) {
     if (!confirm('이 추억을 영구적으로 삭제할까요?\n삭제하면 되돌릴 수 없어요.')) return;
     fetch(`${Daylog.api}/api/memories/${id}`, { method: 'DELETE', headers: Daylog.authHeaders(true) })
         .then(Daylog.handleResponse)
-        .then(() => { showToast('삭제 완료'); openTrashModal(); })
+        .then(() => { showToast('영구 삭제했어요'); openTrashModal(); })
         .catch(err => { console.error(err); showToast('삭제 실패'); });
 }
 
 function restoreComment(id) {
     fetch(`${Daylog.api}/comment/${id}/restore`, { method: 'PUT', headers: Daylog.authHeaders(true) })
         .then(Daylog.handleResponse)
-        .then(() => { showToast('복원 완료'); openTrashModal(); })
+        .then(() => { showToast('복원했어요'); openTrashModal(); })
         .catch(err => { console.error(err); showToast('복원 실패'); });
 }
 
@@ -1802,7 +1979,7 @@ function deleteCommentForever(id) {
     if (!confirm('이 댓글을 영구적으로 삭제할까요?\n삭제하면 되돌릴 수 없어요.')) return;
     fetch(`${Daylog.api}/comment/${id}`, { method: 'DELETE', headers: Daylog.authHeaders(true) })
         .then(Daylog.handleResponse)
-        .then(() => { showToast('삭제 완료'); openTrashModal(); })
+        .then(() => { showToast('영구 삭제했어요'); openTrashModal(); })
         .catch(err => { console.error(err); showToast('삭제 실패'); });
 }
 
@@ -1842,6 +2019,7 @@ function openMemoryListModal(title, items) {
 function closeListModal() {
     const modal = document.getElementById('list-modal');
     if (modal) modal.classList.add('hidden');
+    Daylog._openListKind = null;
 }
 
 function showDDayInfo() {
@@ -1984,6 +2162,112 @@ function closeCropper() {
     if (modal) modal.classList.add('hidden');
     if (_crop.url) { URL.revokeObjectURL(_crop.url); _crop.url = null; }
     _crop.onDone = null;
+}
+
+// ===== 추억 사진 편집기 (자르기 + 회전) =====
+const _ped = { url: null, img: null, natW: 0, natH: 0, stageW: 0, stageH: 0, dispScale: 1, dispX: 0, dispY: 0, crop: { x: 0, y: 0, w: 0, h: 0 }, onDone: null, drag: null };
+
+function openPhotoEditor(file, onDone) {
+    const modal = document.getElementById('photo-editor-modal');
+    const imEl = document.getElementById('pe-img');
+    if (!modal || !imEl || !file) { if (onDone) onDone(file); return; }
+    _ped.onDone = onDone;
+    if (_ped.url) URL.revokeObjectURL(_ped.url);
+    _ped.url = URL.createObjectURL(file);
+
+    const im = new Image();
+    im.onload = () => {
+        _ped.img = im;
+        _ped.natW = im.naturalWidth;
+        _ped.natH = im.naturalHeight;
+        imEl.src = _ped.url;
+        modal.classList.remove('hidden');
+        requestAnimationFrame(() => peLayout(true));
+    };
+    im.src = _ped.url;
+}
+
+function peLayout(resetCrop) {
+    const stage = document.getElementById('pe-stage');
+    const imEl = document.getElementById('pe-img');
+    if (!stage || !imEl) return;
+    _ped.stageW = stage.clientWidth;
+    _ped.stageH = stage.clientHeight;
+    _ped.dispScale = Math.min(_ped.stageW / _ped.natW, _ped.stageH / _ped.natH) || 1;
+    const dw = _ped.natW * _ped.dispScale, dh = _ped.natH * _ped.dispScale;
+    _ped.dispX = (_ped.stageW - dw) / 2;
+    _ped.dispY = (_ped.stageH - dh) / 2;
+    imEl.style.left = _ped.dispX + 'px';
+    imEl.style.top = _ped.dispY + 'px';
+    imEl.style.width = dw + 'px';
+    imEl.style.height = dh + 'px';
+    if (resetCrop) _ped.crop = { x: _ped.dispX, y: _ped.dispY, w: dw, h: dh };
+    peApplyCropStyle();
+}
+
+function peApplyCropStyle() {
+    const box = document.getElementById('pe-crop');
+    if (!box) return;
+    box.style.left = _ped.crop.x + 'px';
+    box.style.top = _ped.crop.y + 'px';
+    box.style.width = _ped.crop.w + 'px';
+    box.style.height = _ped.crop.h + 'px';
+}
+
+function peClampCrop() {
+    const minX = _ped.dispX, minY = _ped.dispY;
+    const maxX = _ped.dispX + _ped.natW * _ped.dispScale;
+    const maxY = _ped.dispY + _ped.natH * _ped.dispScale;
+    const c = _ped.crop;
+    const MIN = 40;
+    c.w = Math.max(MIN, Math.min(c.w, maxX - minX));
+    c.h = Math.max(MIN, Math.min(c.h, maxY - minY));
+    c.x = Math.max(minX, Math.min(c.x, maxX - c.w));
+    c.y = Math.max(minY, Math.min(c.y, maxY - c.h));
+}
+
+function peRotate() {
+    if (!_ped.img) return;
+    const c = document.createElement('canvas');
+    c.width = _ped.natH; c.height = _ped.natW;
+    const cx = c.getContext('2d');
+    cx.translate(c.width / 2, c.height / 2);
+    cx.rotate(Math.PI / 2);
+    cx.drawImage(_ped.img, -_ped.natW / 2, -_ped.natH / 2);
+    const data = c.toDataURL('image/jpeg', 0.95);
+    const im = new Image();
+    im.onload = () => {
+        _ped.img = im; _ped.natW = im.naturalWidth; _ped.natH = im.naturalHeight;
+        const imEl = document.getElementById('pe-img');
+        if (imEl) imEl.src = data;
+        peLayout(true);
+    };
+    im.src = data;
+}
+
+function peApply() {
+    if (!_ped.img) return;
+    const sx = (_ped.crop.x - _ped.dispX) / _ped.dispScale;
+    const sy = (_ped.crop.y - _ped.dispY) / _ped.dispScale;
+    const sw = _ped.crop.w / _ped.dispScale;
+    const sh = _ped.crop.h / _ped.dispScale;
+    const c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(sw));
+    c.height = Math.max(1, Math.round(sh));
+    const cx = c.getContext('2d');
+    cx.drawImage(_ped.img, sx, sy, sw, sh, 0, 0, c.width, c.height);
+    c.toBlob((blob) => {
+        const cb = _ped.onDone;
+        closePhotoEditor();
+        if (blob && cb) cb(new File([blob], 'memory_' + Date.now() + '.jpg', { type: 'image/jpeg' }));
+    }, 'image/jpeg', 0.92);
+}
+
+function closePhotoEditor() {
+    const modal = document.getElementById('photo-editor-modal');
+    if (modal) modal.classList.add('hidden');
+    if (_ped.url) { URL.revokeObjectURL(_ped.url); _ped.url = null; }
+    _ped.onDone = null; _ped.drag = null;
 }
 
 // ===== 라이트박스 상태 & 제어 =====

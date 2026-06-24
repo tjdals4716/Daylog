@@ -34,8 +34,8 @@
                 <div class="lm-vignette"></div>
                 <div class="lm-reticle"></div>
                 <div class="lm-top">
-                    <div class="lm-banner">
-                        <span class="lm-pin">📍</span> 지도를 탭하거나 주소를 검색해주세요
+                    <div class="lm-banner" id="lm-center-label">
+                        <span class="lm-pin">📍</span> 지도를 움직여 중앙에 위치를 맞춰주세요
                     </div>
                     <div class="lm-search">
                         <span class="lm-search-icon">🔍</span>
@@ -44,7 +44,11 @@
                         <ul id="lm-suggestions" class="lm-suggestions hidden"></ul>
                     </div>
                 </div>
-                <button type="button" id="lm-cancel" class="lm-cancel">취소</button>
+                <div class="lm-actions">
+                    <button type="button" id="lm-current" class="lm-current-btn">🎯 현재 위치로 설정</button>
+                    <button type="button" id="lm-confirm" class="lm-confirm-btn">이 위치로 설정하기</button>
+                    <button type="button" id="lm-cancel" class="lm-cancel">취소</button>
+                </div>
             </div>
 
             <!-- 카메라 버튼 -->
@@ -195,7 +199,7 @@
                 <label>내용</label>
                 <textarea id="edit-memory-content" rows="5" placeholder="이야기를 작성하세요" required></textarea>
             </div>
-            <p class="detail-edit-note">※ 사진은 수정이 불가합니다</p>
+            <p class="detail-edit-note">※ 사진은 수정할 수 없어요.</p>
             <div class="detail-edit-actions">
                 <button type="button" id="detail-edit-cancel" class="cancel-edit-btn">취소</button>
                 <button type="submit" class="submit-btn">저장하기 ✨</button>
@@ -246,6 +250,31 @@
 
 <!-- 카메라 미지원/거부 시 대체 파일 입력 (모바일 카메라 호출) -->
 <input type="file" id="camera-fallback-file" accept="image/*" capture="environment" style="display:none;">
+
+<!-- 추억 사진 편집(자르기/회전) 모달 -->
+<div id="photo-editor-modal" class="modal hidden">
+    <div class="modal-content pe-content">
+        <div class="modal-header">
+            <h3>사진 편집 ✂️</h3>
+            <button type="button" class="close-modal" id="pe-cancel">&times;</button>
+        </div>
+        <div class="pe-stage" id="pe-stage">
+            <img id="pe-img" src="" alt="" draggable="false">
+            <div class="pe-crop" id="pe-crop">
+                <span class="pe-handle pe-nw" data-corner="nw"></span>
+                <span class="pe-handle pe-ne" data-corner="ne"></span>
+                <span class="pe-handle pe-sw" data-corner="sw"></span>
+                <span class="pe-handle pe-se" data-corner="se"></span>
+            </div>
+        </div>
+        <div class="pe-controls">
+            <button type="button" id="pe-rotate" class="pe-btn">↻ 90° 회전</button>
+            <button type="button" id="pe-reset" class="pe-btn">⤢ 자르기 초기화</button>
+        </div>
+        <p class="pe-hint">모서리를 끌어 자르고, 회전 버튼으로 방향을 바꿔요</p>
+        <button type="button" class="submit-btn" id="pe-apply">이 사진으로 적용 ✨</button>
+    </div>
+</div>
 
 <!-- 프로필 사진 편집(자르기/확대) 모달 -->
 <div id="crop-modal" class="modal hidden">
