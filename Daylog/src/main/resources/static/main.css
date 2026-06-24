@@ -209,41 +209,40 @@ button { font-family: inherit; }
 .lm-suggestions .sg-empty { color: var(--gray-400); font-size: 0.88rem; cursor: default; text-align: center; }
 .lm-suggestions .sg-empty:hover { background: var(--white); }
 
-/* 위치 선택 하단 액션 바 */
+/* 위치 선택 하단 액션 바 — 가로 정렬(작게) */
 .lm-actions {
-    position: absolute; bottom: calc(22px + env(safe-area-inset-bottom));
+    position: absolute; bottom: calc(20px + env(safe-area-inset-bottom));
     left: 50%; transform: translateX(-50%);
-    width: min(92%, 400px); display: flex; flex-direction: column; gap: 9px;
-    pointer-events: auto; z-index: 3;
+    width: min(94%, 420px); display: flex; flex-direction: row; align-items: stretch;
+    gap: 7px; pointer-events: auto; z-index: 3;
 }
-.lm-confirm-btn {
-    width: 100%; cursor: pointer; border: none;
-    background: var(--primary); color: var(--white);
-    padding: 14px; border-radius: 16px; font-size: 0.98rem; font-weight: 700;
-    font-family: var(--font-main); box-shadow: var(--shadow-md);
+.lm-current-btn, .lm-confirm-btn, .lm-cancel {
+    cursor: pointer; font-family: var(--font-main); font-weight: 700;
+    border-radius: 13px; font-size: 0.84rem; line-height: 1.2;
+    padding: 11px 8px; white-space: nowrap;
     transition: transform 0.15s, background 0.2s; animation: dropIn 0.4s var(--ease-spring);
 }
+.lm-confirm-btn {
+    flex: 1.5 1 0; border: none;
+    background: var(--primary); color: var(--white); box-shadow: var(--shadow-md);
+}
 .lm-confirm-btn:hover { background: var(--primary-dark); }
-.lm-confirm-btn:active { transform: scale(0.97); }
+.lm-confirm-btn:active { transform: scale(0.96); }
 .lm-current-btn {
-    width: 100%; cursor: pointer;
+    flex: 1.2 1 0;
     background: var(--white); color: var(--primary-dark); border: 1px solid var(--primary-light);
-    padding: 12px; border-radius: 16px; font-size: 0.92rem; font-weight: 700;
-    font-family: var(--font-main); box-shadow: var(--shadow-sm);
-    transition: transform 0.15s, background 0.2s;
+    box-shadow: var(--shadow-sm);
 }
 .lm-current-btn:hover { background: var(--primary-light); }
-.lm-current-btn:active { transform: scale(0.97); }
+.lm-current-btn:active { transform: scale(0.96); }
 .lm-current-btn:disabled { opacity: 0.6; cursor: default; }
-
 .lm-cancel {
-    width: 100%; pointer-events: auto; cursor: pointer;
-    background: transparent; color: var(--gray-600); border: none;
-    padding: 6px; border-radius: 12px; font-size: 0.88rem; font-weight: 600;
-    font-family: var(--font-main); transition: color 0.2s;
+    flex: 0.8 1 0;
+    background: var(--white); color: var(--gray-600); border: 1px solid var(--gray-200);
+    box-shadow: var(--shadow-sm);
 }
-.lm-cancel:hover { color: var(--gray-800); }
-.lm-cancel:active { transform: scale(0.97); }
+.lm-cancel:hover { background: var(--gray-50); }
+.lm-cancel:active { transform: scale(0.96); }
 /* 위치 선택 모드일 때 지도 커서 */
 .map-wrapper.picking { cursor: crosshair; }
 
