@@ -220,6 +220,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let mapClickListener = null;
     let memoryList = [];
     let markers = []; // 지도 마커 인스턴스 보관 (중복 생성 방지)
+    let cameraMode = false;        // 라이브 카메라로 촬영한 추억인지
+    let pickReturnsToForm = false; // 위치 재설정 후 작성 폼으로 복귀(데이터 유지)
 
     const currentUid = getUid();
 
@@ -249,9 +251,12 @@ document.addEventListener('DOMContentLoaded', () => {
     navItems.forEach(item => {
         item.addEventListener('click', (e) => {
             e.preventDefault();
+            // 카메라 메뉴: 탭 전환이 아니라 라이브 카메라 실행
+            if (item.id === 'nav-camera') { openCameraCapture(); return; }
             navItems.forEach(nav => nav.classList.remove('active'));
             item.classList.add('active');
             const targetTab = item.getAttribute('data-tab');
+            if (!targetTab) return;
             tabContents.forEach(tab => {
                 const show = (tab.id === targetTab);
                 tab.style.display = show ? 'block' : 'none';
@@ -306,6 +311,7 @@ document.addEventListener('DOMContentLoaded', () => {
             currentLatLng = { lat: event.coord.lat(), lng: event.coord.lng() };
             reverseGeocodeAndLabel(currentLatLng.lat, currentLatLng.lng, '🎯');
             exitPickMode();
+            pickReturnsToForm = false;
             openMemoryModal();
         });
     }
@@ -343,6 +349,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const resetLocBtn = document.getElementById('btn-reset-location');
     if (resetLocBtn) {
         resetLocBtn.addEventListener('click', () => {
+            pickReturnsToForm = true; // 위치만 다시 고르고 폼으로 복귀
             document.getElementById('memory-modal').classList.add('hidden'); // reset() 호출 안 함 → 입력 유지
             enterPickMode();
         });
@@ -361,9 +368,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.getElementById('lm-cancel').addEventListener('click', () => {
         exitPickMode();
-        selectedFile = null;
-        if (fileInput) fileInput.value = '';
-        showToast('위치 선택을 취소함');
+        if (pickReturnsToForm) {
+            // 위치 재설정 취소 → 입력하던 폼 그대로 복귀 (사진/제목/내용 유지)
+            pickReturnsToForm = false;
+            openMemoryModal();
+            showToast('위치 변경을 취소했어요');
+        } else {
+            selectedFile = null;
+            if (fileInput) fileInput.value = '';
+            showToast('위치 선택을 취소함');
+        }
     });
 
     // --- 주소/장소 검색 + 연관 검색어 ---
@@ -402,6 +416,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         hideSuggestions();
         exitPickMode();
+        pickReturnsToForm = false;
         openMemoryModal();
     }
 
@@ -470,67 +485,92 @@ document.addEventListener('DOMContentLoaded', () => {
     if (searchBtn) searchBtn.addEventListener('click', runSearch);
 
     // --- 사진 업로드 & 위치 지정 ---
-    if (fileInput) {
-        fileInput.addEventListener('change', async (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-            selectedFile = file;
+    async function handlePickedImage(file, fromCamera) {
+        if (!file) return;
+        selectedFile = file;
 
-            // 미리보기
-            const reader = new FileReader();
-            reader.onload = (ev) => {
-                const preview = document.getElementById('image-preview');
-                preview.src = ev.target.result;
-                preview.classList.remove('hidden');
-            };
-            reader.readAsDataURL(file);
+        // 미리보기
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            const preview = document.getElementById('image-preview');
+            preview.src = ev.target.result;
+            preview.classList.remove('hidden');
+        };
+        reader.readAsDataURL(file);
 
-            if (!map) {
-                showToast('지도가 아직 준비되지 않음');
-                return;
-            }
+        // 다시 촬영 버튼: 카메라 경유면 노출, 갤러리면 숨김
+        const retake = document.getElementById('btn-retake-photo');
+        if (retake) retake.classList.toggle('hidden', !fromCamera);
 
-            try {
-                // 1) 날짜 메타데이터(촬영일) 자동 적용
-                let metaAll = null;
-                try { metaAll = await exifr.parse(file); } catch (_) { metaAll = null; }
-                if (metaAll) {
-                    const shotDate = metaAll.DateTimeOriginal || metaAll.CreateDate || metaAll.ModifyDate;
-                    if (shotDate) {
-                        const dObj = (shotDate instanceof Date) ? shotDate : new Date(shotDate);
-                        if (!isNaN(dObj.getTime())) {
-                            const yyyy = dObj.getFullYear();
-                            const mm = String(dObj.getMonth() + 1).padStart(2, '0');
-                            const dd = String(dObj.getDate()).padStart(2, '0');
-                            const dateInput = document.getElementById('memory-date');
-                            if (dateInput) dateInput.value = `${yyyy}-${mm}-${dd}`;
-                        }
+        if (!map) {
+            showToast('지도가 아직 준비되지 않음');
+            return;
+        }
+
+        try {
+            // 1) 날짜 메타데이터(촬영일) 자동 적용
+            let metaAll = null;
+            try { metaAll = await exifr.parse(file); } catch (_) { metaAll = null; }
+            if (metaAll) {
+                const shotDate = metaAll.DateTimeOriginal || metaAll.CreateDate || metaAll.ModifyDate;
+                if (shotDate) {
+                    const dObj = (shotDate instanceof Date) ? shotDate : new Date(shotDate);
+                    if (!isNaN(dObj.getTime())) {
+                        const yyyy = dObj.getFullYear();
+                        const mm = String(dObj.getMonth() + 1).padStart(2, '0');
+                        const dd = String(dObj.getDate()).padStart(2, '0');
+                        const dateInput = document.getElementById('memory-date');
+                        if (dateInput) dateInput.value = `${yyyy}-${mm}-${dd}`;
                     }
                 }
+            }
 
-                // 2) 위치 메타데이터(GPS) 자동 적용
-                const gps = await exifr.gps(file);
-                if (gps && gps.latitude && gps.longitude) {
-                    // 사진 메타데이터로 위치 자동 설정
-                    currentLatLng = { lat: gps.latitude, lng: gps.longitude };
+            // 2) 위치 메타데이터(GPS) 자동 적용
+            const gps = await exifr.gps(file);
+            if (gps && gps.latitude && gps.longitude) {
+                currentLatLng = { lat: gps.latitude, lng: gps.longitude };
+                currentLocationMeta = { placeName: '', address: '' };
+                const badge = document.getElementById('location-status-badge');
+                badge.innerText = "📍 사진 위치가 자동으로 설정되었습니다!";
+                badge.className = "location-badge success";
+                reverseGeocode(gps.latitude, gps.longitude, (addr) => {
+                    currentLocationMeta = { placeName: '', address: addr || '' };
+                    if (addr) badge.innerText = "📍 " + addr;
+                });
+                openMemoryModal();
+            } else if (fromCamera && navigator.geolocation) {
+                // 카메라 촬영 사진은 EXIF 위치가 없으므로 현재 GPS 사용
+                const badge = document.getElementById('location-status-badge');
+                if (badge) { badge.innerText = '📍 현재 위치를 가져오는 중…'; badge.className = 'location-badge'; }
+                navigator.geolocation.getCurrentPosition((pos) => {
+                    currentLatLng = { lat: pos.coords.latitude, lng: pos.coords.longitude };
                     currentLocationMeta = { placeName: '', address: '' };
-                    const badge = document.getElementById('location-status-badge');
-                    badge.innerText = "📍 사진 위치가 자동으로 설정되었습니다!";
-                    badge.className = "location-badge success";
-                    // 역지오코딩으로 실제 주소를 받아 뱃지에 표시
-                    reverseGeocode(gps.latitude, gps.longitude, (addr) => {
+                    if (badge) { badge.innerText = '📍 현재 위치로 설정되었습니다!'; badge.className = 'location-badge success'; }
+                    reverseGeocode(currentLatLng.lat, currentLatLng.lng, (addr) => {
                         currentLocationMeta = { placeName: '', address: addr || '' };
-                        if (addr) badge.innerText = "📍 " + addr;
+                        if (addr && badge) badge.innerText = '📍 ' + addr;
                     });
                     openMemoryModal();
-                } else {
-                    // 메타데이터 없음 → 지도 클릭 모드
-                    enterPickMode();
-                }
-            } catch (error) {
-                showToast('사진 분석 실패. 지도에서 위치를 골라주세요.');
+                }, () => {
+                    if (badge) { badge.innerText = '📍 위치를 가져올 수 없어요 · 직접 설정'; badge.className = 'location-badge manual'; }
+                    openMemoryModal();
+                }, { enableHighAccuracy: true, timeout: 8000 });
+            } else {
+                // 메타데이터 없음 → 지도 클릭 모드
                 enterPickMode();
             }
+        } catch (error) {
+            showToast('사진 분석 실패. 지도에서 위치를 골라주세요.');
+            enterPickMode();
+        }
+    }
+
+    if (fileInput) {
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            fileInput.value = '';
+            cameraMode = false;
+            handlePickedImage(file, false);
         });
     }
 
@@ -582,6 +622,218 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
         });
     }
+
+    // ==========================================
+    //  라이브 카메라 촬영 (카메라 메뉴 / 다시 촬영하기)
+    // ==========================================
+    const camModal = document.getElementById('camera-modal');
+    const camVideo = document.getElementById('camera-video');
+    const camLoading = document.getElementById('camera-loading');
+    const camFallback = document.getElementById('camera-fallback-file');
+    let camStream = null;
+    let camFacing = 'environment';
+
+    async function startCameraStream() {
+        stopCameraStream();
+        if (camLoading) camLoading.classList.remove('hidden');
+        try {
+            camStream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: camFacing }, audio: false
+            });
+            if (camVideo) { camVideo.srcObject = camStream; }
+            if (camLoading) camLoading.classList.add('hidden');
+        } catch (err) {
+            console.warn('카메라 접근 실패 → 파일 입력으로 대체:', err);
+            if (camLoading) camLoading.classList.add('hidden');
+            closeCameraModal();
+            // getUserMedia 미지원/거부 → 모바일 기본 카메라 호출(대체)
+            if (camFallback) camFallback.click();
+        }
+    }
+
+    function stopCameraStream() {
+        if (camStream) {
+            camStream.getTracks().forEach(t => t.stop());
+            camStream = null;
+        }
+        if (camVideo) camVideo.srcObject = null;
+    }
+
+    function openCameraCapture() {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            if (camFallback) camFallback.click();
+            return;
+        }
+        // 촬영 중에는 작성 폼을 잠시 숨김(데이터는 유지 — reset 호출 안 함)
+        document.getElementById('memory-modal').classList.add('hidden');
+        if (camModal) camModal.classList.remove('hidden');
+        startCameraStream();
+    }
+
+    function closeCameraModal() {
+        stopCameraStream();
+        if (camModal) camModal.classList.add('hidden');
+    }
+
+    // 촬영 → 위치(현재 GPS)·날짜(오늘) 자동 설정 → 작성 폼 오픈
+    function capturePhoto() {
+        if (!camVideo || !camVideo.videoWidth) { showToast('카메라가 준비되지 않았어요'); return; }
+        const canvas = document.getElementById('camera-canvas');
+        canvas.width = camVideo.videoWidth;
+        canvas.height = camVideo.videoHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(camVideo, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob((blob) => {
+            if (!blob) { showToast('사진 처리 실패'); return; }
+            const file = new File([blob], 'camera_' + Date.now() + '.jpg', { type: 'image/jpeg' });
+            selectedFile = file;
+            cameraMode = true;
+            closeCameraModal();
+
+            // 미리보기
+            const preview = document.getElementById('image-preview');
+            const url = URL.createObjectURL(blob);
+            preview.src = url;
+            preview.classList.remove('hidden');
+            // 다시 촬영 버튼 노출
+            const retake = document.getElementById('btn-retake-photo');
+            if (retake) retake.classList.remove('hidden');
+
+            // 날짜: 오늘로 자동 설정
+            const dateInput = document.getElementById('memory-date');
+            if (dateInput) dateInput.value = new Date().toISOString().substring(0, 10);
+
+            // 위치: 현재 GPS 자동 설정
+            const badge = document.getElementById('location-status-badge');
+            if (badge) { badge.innerText = '📍 현재 위치를 가져오는 중…'; badge.className = 'location-badge'; }
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition((pos) => {
+                    currentLatLng = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+                    currentLocationMeta = { placeName: '', address: '' };
+                    if (badge) { badge.innerText = '📍 현재 위치로 설정되었습니다!'; badge.className = 'location-badge success'; }
+                    reverseGeocode(currentLatLng.lat, currentLatLng.lng, (addr) => {
+                        currentLocationMeta = { placeName: '', address: addr || '' };
+                        if (addr && badge) badge.innerText = '📍 ' + addr;
+                    });
+                }, (err) => {
+                    console.warn('위치 가져오기 실패:', err);
+                    if (badge) { badge.innerText = '📍 위치를 가져올 수 없어요 · 아래에서 직접 설정'; badge.className = 'location-badge manual'; }
+                    showToast('위치 접근이 거부되었어요. 위치를 직접 설정해주세요.');
+                }, { enableHighAccuracy: true, timeout: 8000 });
+            } else if (badge) {
+                badge.innerText = '📍 위치 기능을 사용할 수 없어요 · 직접 설정';
+                badge.className = 'location-badge manual';
+            }
+
+            openMemoryModal();
+        }, 'image/jpeg', 0.92);
+    }
+
+    if (document.getElementById('camera-shutter'))
+        document.getElementById('camera-shutter').addEventListener('click', capturePhoto);
+    if (document.getElementById('camera-close'))
+        document.getElementById('camera-close').addEventListener('click', closeCameraModal);
+    if (document.getElementById('camera-switch'))
+        document.getElementById('camera-switch').addEventListener('click', () => {
+            camFacing = (camFacing === 'environment') ? 'user' : 'environment';
+            startCameraStream();
+        });
+
+    // 대체 파일(모바일 카메라) 선택 시: 기존 사진 업로드 로직과 동일하게 처리
+    if (camFallback) {
+        camFallback.addEventListener('change', (e) => {
+            const f = e.target.files[0];
+            camFallback.value = '';
+            if (!f) return;
+            cameraMode = true;
+            if (fileInput) {
+                // 기존 change 핸들러를 재사용하기 위해 동일 처리 함수 호출
+                handlePickedImage(f, true);
+            }
+        });
+    }
+
+    // 다시 촬영하기 → 카메라 재실행 (작성 중 데이터 유지)
+    const retakeBtn = document.getElementById('btn-retake-photo');
+    if (retakeBtn) retakeBtn.addEventListener('click', () => { openCameraCapture(); });
+
+    // ==========================================
+    //  당겨서 새로고침 (Pull to refresh)
+    // ==========================================
+    const ptrIndicator = document.createElement('div');
+    ptrIndicator.id = 'ptr-indicator';
+    ptrIndicator.innerHTML = '<div class="ptr-spinner"></div>';
+    document.body.appendChild(ptrIndicator);
+
+    function ptrSet(dist, refreshing) {
+        if (refreshing) {
+            ptrIndicator.classList.add('refreshing', 'visible');
+            ptrIndicator.style.transform = 'translateX(-50%) translateY(46px)';
+            ptrIndicator.querySelector('.ptr-spinner').style.transform = '';
+            return;
+        }
+        ptrIndicator.classList.remove('refreshing');
+        if (dist <= 0) {
+            ptrIndicator.classList.remove('visible');
+            ptrIndicator.style.transform = 'translateX(-50%) translateY(-10px)';
+            return;
+        }
+        ptrIndicator.classList.add('visible');
+        const y = Math.min(dist, 70);
+        ptrIndicator.style.transform = 'translateX(-50%) translateY(' + y + 'px)';
+        ptrIndicator.querySelector('.ptr-spinner').style.transform = 'rotate(' + (dist * 3) + 'deg)';
+    }
+
+    function attachPullToRefresh(scrollEl, isEnabled, onRefresh) {
+        if (!scrollEl) return;
+        let startY = 0, pulling = false, dist = 0, busy = false;
+        scrollEl.addEventListener('touchstart', (e) => {
+            if (busy || !isEnabled() || scrollEl.scrollTop > 0) { pulling = false; return; }
+            startY = e.touches[0].clientY; pulling = true; dist = 0;
+        }, { passive: true });
+        scrollEl.addEventListener('touchmove', (e) => {
+            if (!pulling || busy) return;
+            const dy = e.touches[0].clientY - startY;
+            if (dy <= 0 || scrollEl.scrollTop > 0) { dist = 0; ptrSet(0); pulling = (dy > 0); return; }
+            dist = dy * 0.5;
+            ptrSet(dist);
+            if (dy > 6 && e.cancelable) e.preventDefault();
+        }, { passive: false });
+        const finish = () => {
+            if (!pulling || busy) { return; }
+            pulling = false;
+            if (dist >= 60) {
+                busy = true; ptrSet(0, true);
+                Promise.resolve().then(onRefresh).finally(() => {
+                    setTimeout(() => { busy = false; ptrSet(0); }, 700);
+                });
+            } else {
+                ptrSet(0);
+            }
+        };
+        scrollEl.addEventListener('touchend', finish);
+        scrollEl.addEventListener('touchcancel', finish);
+    }
+
+    const containerEl = document.querySelector('main.container');
+    attachPullToRefresh(containerEl,
+        () => {
+            const tl = document.getElementById('tab-timeline');
+            const pf = document.getElementById('tab-profile');
+            return (tl && tl.style.display !== 'none') || (pf && pf.style.display !== 'none');
+        },
+        () => {
+            const pf = document.getElementById('tab-profile');
+            if (pf && pf.style.display !== 'none') { loadProfiles(); }
+            loadMemoriesFromServer();
+            showToast('새로고침 완료');
+        });
+
+    // 추억 상세 모달 당겨서 새로고침
+    const detailScroll = document.querySelector('#detail-modal .modal-content');
+    attachPullToRefresh(detailScroll,
+        () => !document.getElementById('detail-modal').classList.contains('hidden') && _detailMemory != null,
+        () => { if (_detailMemory) { loadComments(_detailMemory.id); } loadMemoriesFromServer(); showToast('새로고침 완료'); });
 
     // --- 데이터 불러오기 및 렌더링 ---
     function loadMemoriesFromServer() {
@@ -715,6 +967,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 Daylog.meUid = meUser && meUser.uid;
                 Daylog.partnerUid = partnerUser && partnerUser.uid;
+                // 추억 상세의 작성자 표시용 사용자 맵
+                Daylog.usersByUid = {};
+                [meUser, partnerUser].forEach(u => { if (u && u.uid) Daylog.usersByUid[u.uid] = u; });
 
                 if (!meUser) {
                     console.warn('[Daylog] 로그인 uid(' + currentUid + ')와 일치하는 사용자가 목록에 없습니다.');
@@ -742,6 +997,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 meUser = me;
                 if (isAuthorizedName(me.name) === false) { blockUnauthorizedUser(); return; }
                 Daylog.meUid = me.uid;
+                Daylog.usersByUid = {}; if (me.uid) Daylog.usersByUid[me.uid] = me;
                 renderProfileBox('me', me, '👦', '나');
                 updateProfileStats();
                 maybePromptNickname();
@@ -814,7 +1070,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (user && user.profileURL) {
             wrap.classList.add('viewable');
-            wrap.onclick = () => openLightbox(user.profileURL);
+            wrap.onclick = () => openLightbox(user.profileURL, avatar);
         }
     }
 
@@ -857,7 +1113,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 .then(updated => {
                     currentUser = updated || payload;
                     document.getElementById('nickname-modal').classList.add('hidden');
-                    showToast('닉네임 설정 완료');
+                    showToast('닉네임이 설정 완료');
                     loadProfiles();
                 })
                 .catch(err => { console.error(err); showToast('설정 실패: ' + (err.message || '서버 오류')); })
@@ -880,7 +1136,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function openEditPage() {
-        if (!currentUser) { showToast('사용자 정보를 불러오는 중이에요'); loadProfiles(); return; }
+        if (!currentUser) { showToast('사용자 정보를 불러오는 중'); loadProfiles(); return; }
         editPendingFile = null;
         editRemovePhoto = false;
         document.getElementById('edit-nickname').value = currentUser.nickname || '';
@@ -902,7 +1158,7 @@ document.addEventListener('DOMContentLoaded', () => {
             editPendingFile = null;
             editRemovePhoto = true;
             setEditAvatar(DEFAULT_AVATAR, false);
-            showToast('저장하면 사진이 제거돼요');
+            showToast('저장하면 사진이 제거됩니다');
         });
     }
 
@@ -1045,11 +1301,11 @@ document.addEventListener('DOMContentLoaded', () => {
         closeLightbox();
     });
 
-    // 미리보기 / 상세 이미지 클릭 → 라이트박스 열기
+    // 미리보기 / 상세 이미지 클릭 → 라이트박스 열기 (원본 위치에서 확대)
     const previewImg = document.getElementById('image-preview');
-    if (previewImg) previewImg.addEventListener('click', function () { if (this.src) openLightbox(this.src); });
+    if (previewImg) previewImg.addEventListener('click', function () { if (this.src) openLightbox(this.src, this); });
     const detailImg = document.getElementById('detail-image');
-    if (detailImg) detailImg.addEventListener('click', function () { if (this.src) openLightbox(this.src); });
+    if (detailImg) detailImg.addEventListener('click', function () { if (this.src) openLightbox(this.src, this); });
 
     // ===== 사진 편집(크롭/줌) 이벤트 =====
     const cropStage = document.getElementById('crop-stage');
@@ -1091,6 +1347,8 @@ function closeMemoryModal() {
     document.getElementById('memory-modal').classList.add('hidden');
     document.getElementById('memory-form').reset();
     document.getElementById('image-preview').classList.add('hidden');
+    const rt = document.getElementById('btn-retake-photo');
+    if (rt) rt.classList.add('hidden');
     const lm = document.getElementById('location-mode');
     if (lm) lm.classList.add('hidden');
 }
@@ -1111,10 +1369,26 @@ function openDetailModal(memory) {
     const isOwner = !!(memory.ownerUid && Daylog.currentUid && memory.ownerUid === Daylog.currentUid);
     const contentHtml = escapeHtml(memory.content || '').replace(/\n/g, '<br>');
 
+    // 작성자 정보 (2인 전용 — usersByUid 에서 조회)
+    const author = (Daylog.usersByUid && Daylog.usersByUid[memory.ownerUid]) || null;
+    let authorName = '';
+    if (author) {
+        authorName = (author.nickname && String(author.nickname).trim())
+            ? author.nickname
+            : (typeof normalizeDisplayName === 'function' ? normalizeDisplayName(author.name) : (author.name || ''));
+    }
+    const authorPhoto = (author && author.profileURL) ? author.profileURL : DEFAULT_AVATAR;
+    const authorHtml =
+        '<div class="detail-author">' +
+        '<div class="da-avatar" id="detail-author-avatar" style="background-image:url(\'' + authorPhoto + '\')"></div>' +
+        '<span class="da-name">' + escapeHtml(authorName || '작성자') + '</span>' +
+        '</div>';
+
     view.innerHTML =
         '<div class="detail-container">' +
         '<div class="detail-header">' +
         '<h2 class="detail-title">' + escapeHtml(memory.title || '') + '</h2>' +
+        authorHtml +
         '<div class="detail-meta">' +
         '<span class="meta-item">📅 ' + escapeHtml(dateStr) + '</span>' +
         '<span class="meta-item" id="detail-loc">📍 위치 확인 중…</span>' +
@@ -1122,12 +1396,6 @@ function openDetailModal(memory) {
         '</div>' +
         imageHtml +
         '<div class="detail-body"><p>' + contentHtml + '</p></div>' +
-        (isOwner
-            ? '<div class="detail-owner-actions">' +
-            '<button type="button" class="detail-edit-btn" id="detail-edit-open">✏️ 수정하기</button>' +
-            '<button type="button" class="detail-trash-btn" id="detail-trash-open">🗑️ 휴지통</button>' +
-            '</div>'
-            : '') +
         // 댓글 영역
         '<div class="comments-section">' +
         '<div class="comments-head">💬 댓글 <span class="comments-count" id="comments-count">0</span></div>' +
@@ -1139,10 +1407,23 @@ function openDetailModal(memory) {
         '</div>' +
         '</div>';
 
+    // 헤더 영역: (소유자만) 수정/휴지통 버튼을 '추억 상세' 위치에 작게 배치
+    const headerActions = document.getElementById('detail-header-actions');
+    if (headerActions) {
+        headerActions.innerHTML = isOwner
+            ? '<button type="button" class="detail-edit-btn" id="detail-edit-open">✏️ 수정</button>' +
+            '<button type="button" class="detail-trash-btn" id="detail-trash-open">🗑️</button>'
+            : '';
+    }
+
     applyDetailLocation(memory);
 
     const di = document.getElementById('detail-image');
-    if (di) di.addEventListener('click', () => { if (di.src) openLightbox(di.src); });
+    if (di) di.addEventListener('click', () => { if (di.src) openLightbox(di.src, di); });
+
+    // 작성자 프로필 클릭 → 확대 (실제 사진/기본 이미지 모두)
+    const da = document.getElementById('detail-author-avatar');
+    if (da) da.addEventListener('click', () => openLightbox(authorPhoto, da));
 
     const eo = document.getElementById('detail-edit-open');
     if (eo) eo.addEventListener('click', () => enterDetailEdit(memory));
@@ -1232,6 +1513,8 @@ function saveDetailEdit() {
 
 function closeDetailModal() {
     document.getElementById('detail-modal').classList.add('hidden');
+    const ha = document.getElementById('detail-header-actions');
+    if (ha) ha.innerHTML = '';
     exitDetailEdit();
     _detailMemory = null;
 }
@@ -1262,7 +1545,7 @@ function commentTimeLabel(iso) {
 
 function commentAvatarHtml(c) {
     const src = (c.ownerProfileURL && c.ownerProfileURL.trim()) ? c.ownerProfileURL : DEFAULT_AVATAR;
-    return '<div class="c-avatar" style="background-image:url(\'' + src + '\')"></div>';
+    return '<div class="c-avatar" style="background-image:url(\'' + src + '\')" data-photo="' + src + '" onclick="openLightbox(this.dataset.photo, this)"></div>';
 }
 
 function commentItemHtml(c, memoryId, isReply) {
@@ -1454,7 +1737,7 @@ function renderTrash(memories, comments) {
             const dateStr = m.createdAt ? m.createdAt.substring(0, 10).replace(/-/g, '.') : '';
             const thumb = m.mediaURL
                 ? '<div class="lm-thumb" style="background-image:url(\'' + m.mediaURL + '\')"></div>'
-                : '<div class="lm-thumb lm-thumb-empty">👾</div>';
+                : '<div class="lm-thumb lm-thumb-empty">🤎</div>';
             html +=
                 '<div class="trash-row">' +
                 thumb +
@@ -1496,7 +1779,7 @@ function renderTrash(memories, comments) {
 function restoreMemory(id) {
     fetch(`${Daylog.api}/api/memories/${id}/restore`, { method: 'PUT', headers: Daylog.authHeaders(true) })
         .then(Daylog.handleResponse)
-        .then(() => { showToast('복원했어요'); openTrashModal(); Daylog.reload(); })
+        .then(() => { showToast('복원 완료'); openTrashModal(); Daylog.reload(); })
         .catch(err => { console.error(err); showToast('복원 실패'); });
 }
 
@@ -1504,14 +1787,14 @@ function deleteMemoryForever(id) {
     if (!confirm('이 추억을 영구적으로 삭제할까요?\n삭제하면 되돌릴 수 없어요.')) return;
     fetch(`${Daylog.api}/api/memories/${id}`, { method: 'DELETE', headers: Daylog.authHeaders(true) })
         .then(Daylog.handleResponse)
-        .then(() => { showToast('영구 삭제했어요'); openTrashModal(); })
+        .then(() => { showToast('삭제 완료'); openTrashModal(); })
         .catch(err => { console.error(err); showToast('삭제 실패'); });
 }
 
 function restoreComment(id) {
     fetch(`${Daylog.api}/comment/${id}/restore`, { method: 'PUT', headers: Daylog.authHeaders(true) })
         .then(Daylog.handleResponse)
-        .then(() => { showToast('복원했어요'); openTrashModal(); })
+        .then(() => { showToast('복원 완료'); openTrashModal(); })
         .catch(err => { console.error(err); showToast('복원 실패'); });
 }
 
@@ -1519,7 +1802,7 @@ function deleteCommentForever(id) {
     if (!confirm('이 댓글을 영구적으로 삭제할까요?\n삭제하면 되돌릴 수 없어요.')) return;
     fetch(`${Daylog.api}/comment/${id}`, { method: 'DELETE', headers: Daylog.authHeaders(true) })
         .then(Daylog.handleResponse)
-        .then(() => { showToast('영구 삭제했어요'); openTrashModal(); })
+        .then(() => { showToast('삭제 완료'); openTrashModal(); })
         .catch(err => { console.error(err); showToast('삭제 실패'); });
 }
 
@@ -1539,7 +1822,7 @@ function openMemoryListModal(title, items) {
             const dateStr = memory.createdAt ? memory.createdAt.substring(0, 10).replace(/-/g, '.') : '';
             const thumb = memory.mediaURL
                 ? `<div class="lm-thumb" style="background-image:url('${memory.mediaURL}')"></div>`
-                : '<div class="lm-thumb lm-thumb-empty">👾</div>';
+                : '<div class="lm-thumb lm-thumb-empty">🤎</div>';
             const row = document.createElement('div');
             row.className = 'lm-row';
             row.innerHTML =
@@ -1680,10 +1963,11 @@ function setCropZoom(newZoom) {
 function cropApply() {
     const img = document.getElementById('crop-img');
     const s = _crop.base * _crop.zoom;
-    const out = 512;
     const sx = (0 - _crop.x) / s;
     const sy = (0 - _crop.y) / s;
     const sSize = _crop.size / s;
+    // 잘라낼 영역의 실제(원본) 해상도를 유지 → 확대(라이트박스) 시 원본 크기로 표시
+    const out = Math.max(512, Math.min(Math.round(sSize), 1600));
     const canvas = document.createElement('canvas');
     canvas.width = out; canvas.height = out;
     const ctx = canvas.getContext('2d');
@@ -1703,28 +1987,91 @@ function closeCropper() {
 }
 
 // ===== 라이트박스 상태 & 제어 =====
-const _lb = { scale: 1, x: 0, y: 0, dragging: false, sx: 0, sy: 0, bx: 0, by: 0, moved: false };
+const _lb = { scale: 1, x: 0, y: 0, dragging: false, sx: 0, sy: 0, bx: 0, by: 0, moved: false, originRect: null, targetRect: null, animating: false };
 function _lbApply() {
     const img = document.getElementById('lightbox-img');
     if (img) img.style.transform = 'translate(' + _lb.x + 'px, ' + _lb.y + 'px) scale(' + _lb.scale + ')';
 }
-function openLightbox(src) {
+function _rectOf(el) {
+    const r = el.getBoundingClientRect();
+    return { x: r.left, y: r.top, w: r.width, h: r.height, cx: r.left + r.width / 2, cy: r.top + r.height / 2 };
+}
+// 메타(스레드/인스타)식: 원본 위치에서 확대되어 나타나고, 닫을 때 제자리로 축소
+function openLightbox(src, originEl) {
     if (!src) return;
     const lb = document.getElementById('lightbox');
     const img = document.getElementById('lightbox-img');
     const hint = document.getElementById('lightbox-hint');
     if (!lb || !img) return;
-    img.src = src;
-    _lb.scale = 1; _lb.x = 0; _lb.y = 0; _lbApply();
+
+    _lb.scale = 1; _lb.x = 0; _lb.y = 0;
+    _lb.originRect = (originEl && originEl.getBoundingClientRect) ? _rectOf(originEl) : null;
     if (hint) hint.style.opacity = '1';
+
+    const runAnim = () => {
+        // 확대된 최종(target) 위치 측정
+        img.style.transition = 'none';
+        img.style.transform = 'none';
+        img.style.borderRadius = '0';
+        const target = _rectOf(img);
+        _lb.targetRect = target;
+        const o = _lb.originRect;
+        if (o && target.w && target.h) {
+            const scale = Math.max(o.w / target.w, o.h / target.h);
+            const tx = o.cx - target.cx, ty = o.cy - target.cy;
+            img.style.transformOrigin = 'center center';
+            img.style.transform = 'translate(' + tx + 'px,' + ty + 'px) scale(' + scale + ')';
+            img.style.borderRadius = '50%';
+            void img.offsetWidth; // reflow
+            img.style.transition = 'transform 0.34s cubic-bezier(.22,.61,.36,1), border-radius 0.34s ease';
+            requestAnimationFrame(() => {
+                img.style.transform = 'translate(0px,0px) scale(1)';
+                img.style.borderRadius = '0';
+            });
+        } else {
+            img.style.transition = 'transform 0.2s var(--ease-soft)';
+        }
+    };
+
     lb.classList.remove('hidden');
+    lb.style.opacity = '';
+    if (img.src !== src) {
+        img.onload = () => { img.onload = null; runAnim(); };
+        img.src = src;
+        if (img.complete && img.naturalWidth) { img.onload = null; runAnim(); }
+    } else {
+        runAnim();
+    }
 }
 function closeLightbox() {
     const lb = document.getElementById('lightbox');
     if (!lb || lb.classList.contains('hidden')) return;
-    lb.classList.add('hidden');
     const img = document.getElementById('lightbox-img');
-    if (img) img.src = '';
+
+    // 확대(줌) 상태였다면 먼저 원위치
+    _lb.scale = 1; _lb.x = 0; _lb.y = 0;
+
+    const o = _lb.originRect, target = _lb.targetRect;
+    if (img && o && target && target.w && target.h) {
+        const scale = Math.max(o.w / target.w, o.h / target.h);
+        const tx = o.cx - target.cx, ty = o.cy - target.cy;
+        img.style.transition = 'transform 0.3s cubic-bezier(.4,0,.2,1), border-radius 0.3s ease';
+        img.style.transform = 'translate(' + tx + 'px,' + ty + 'px) scale(' + scale + ')';
+        img.style.borderRadius = '50%';
+        lb.style.transition = 'opacity 0.3s ease';
+        lb.style.opacity = '0';
+        setTimeout(() => {
+            lb.classList.add('hidden');
+            lb.style.opacity = '';
+            lb.style.transition = '';
+            if (img) { img.src = ''; img.style.transition = ''; img.style.transform = ''; img.style.borderRadius = ''; }
+            _lb.originRect = null; _lb.targetRect = null;
+        }, 300);
+    } else {
+        lb.classList.add('hidden');
+        if (img) { img.src = ''; img.style.transform = ''; img.style.borderRadius = ''; }
+        _lb.originRect = null; _lb.targetRect = null;
+    }
 }
 
 let _toastTimer = null;

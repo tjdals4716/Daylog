@@ -120,6 +120,10 @@
 
 <!-- 바텀 네비 -->
 <nav class="bottom-nav">
+    <a href="#" class="nav-item" id="nav-camera">
+        <span class="nav-icon">📷</span>
+        <span class="nav-text">카메라</span>
+    </a>
     <a href="#" class="nav-item active" data-tab="tab-map">
         <span class="nav-icon">🗺️</span>
         <span class="nav-text">지도</span>
@@ -145,6 +149,7 @@
             <div class="preview-zone">
                 <img id="image-preview" src="" alt="미리보기" class="hidden">
             </div>
+            <button type="button" id="btn-retake-photo" class="retake-photo-btn hidden">📷 다시 촬영하기</button>
             <div id="location-status-badge" class="location-badge">위치 설정 중...</div>
             <button type="button" id="btn-reset-location" class="reset-location-btn">📍 위치 다시 설정하기</button>
 
@@ -168,8 +173,8 @@
 <!-- 상세 조회 모달 -->
 <div id="detail-modal" class="modal hidden">
     <div class="modal-content detail-content">
-        <div class="modal-header">
-            <h3 id="detail-modal-title">추억 상세</h3>
+        <div class="modal-header detail-modal-header">
+            <div id="detail-header-actions" class="detail-header-actions"></div>
             <button type="button" class="close-modal" onclick="closeDetailModal()">&times;</button>
         </div>
 
@@ -190,7 +195,7 @@
                 <label>내용</label>
                 <textarea id="edit-memory-content" rows="5" placeholder="이야기를 작성하세요" required></textarea>
             </div>
-            <p class="detail-edit-note">※ 사진은 수정할 수 없어요.</p>
+            <p class="detail-edit-note">※ 사진은 수정이 불가합니다</p>
             <div class="detail-edit-actions">
                 <button type="button" id="detail-edit-cancel" class="cancel-edit-btn">취소</button>
                 <button type="submit" class="submit-btn">저장하기 ✨</button>
@@ -223,6 +228,24 @@
 
 <!-- 토스트 -->
 <div id="toast" class="toast"></div>
+
+<!-- 라이브 카메라 모달 -->
+<div id="camera-modal" class="camera-modal hidden">
+    <video id="camera-video" autoplay playsinline muted></video>
+    <canvas id="camera-canvas" class="hidden"></canvas>
+    <div class="camera-topbar">
+        <button type="button" id="camera-close" class="camera-x" aria-label="닫기">&times;</button>
+        <span class="camera-title">사진 촬영</span>
+        <button type="button" id="camera-switch" class="camera-switch" aria-label="카메라 전환">🔄</button>
+    </div>
+    <div class="camera-bottombar">
+        <button type="button" id="camera-shutter" class="camera-shutter" aria-label="촬영"></button>
+    </div>
+    <div id="camera-loading" class="camera-loading hidden">카메라를 준비하는 중…</div>
+</div>
+
+<!-- 카메라 미지원/거부 시 대체 파일 입력 (모바일 카메라 호출) -->
+<input type="file" id="camera-fallback-file" accept="image/*" capture="environment" style="display:none;">
 
 <!-- 프로필 사진 편집(자르기/확대) 모달 -->
 <div id="crop-modal" class="modal hidden">

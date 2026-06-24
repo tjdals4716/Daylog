@@ -89,7 +89,7 @@ button { font-family: inherit; }
 }
 .nav-item {
     display: flex; flex-direction: column; align-items: center; text-decoration: none;
-    color: var(--gray-400); gap: 4px; width: 64px; padding: 6px 0;
+    color: var(--gray-400); gap: 4px; width: 56px; padding: 6px 0;
     border-radius: 14px;
     transition: color 0.25s var(--ease-soft), background 0.25s var(--ease-soft);
 }
@@ -224,9 +224,9 @@ button { font-family: inherit; }
 /* ================= 카메라 버튼 ================= */
 .floating-camera-zone { position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 400; }
 .camera-btn {
-    background: var(--primary); color: var(--white); padding: 15px 30px;
-    border-radius: 30px; border: none; font-size: 1rem; font-weight: 600;
-    box-shadow: 0 8px 20px rgba(176, 137, 104, 0.42); cursor: pointer;
+    background: var(--primary); color: var(--white); padding: 10px 20px;
+    border-radius: 24px; border: none; font-size: 0.85rem; font-weight: 600;
+    box-shadow: 0 6px 16px rgba(176, 137, 104, 0.42); cursor: pointer;
     transition: transform 0.18s var(--ease-spring), box-shadow 0.2s;
 }
 .camera-btn:hover { box-shadow: 0 10px 26px rgba(176, 137, 104, 0.55); transform: translateY(-2px); }
@@ -648,13 +648,16 @@ input[type="date"]::-webkit-date-and-time-value {
     width: 100%;
     border-radius: 16px;    /* 사진 모서리 둥글게 */
     overflow: hidden;
+    background: var(--gray-100);
     box-shadow: var(--shadow-md, 0 4px 12px rgba(0,0,0,0.08)); /* 부드러운 그림자 */
+    cursor: zoom-in;
 }
 
 .detail-image-wrap img {
     width: 100%;
-    max-height: 280px;      /* 사진이 너무 길어지지 않도록 제한 */
-    object-fit: cover;      /* 비율 깨짐 방지 */
+    height: auto;           /* 비율 유지 — 잘리지 않고 전체 표시 */
+    max-height: 70vh;
+    object-fit: contain;
     display: block;
 }
 
@@ -968,3 +971,110 @@ input[type="date"]::-webkit-date-and-time-value {
 .trash-restore:hover { background: var(--primary); color: var(--white); }
 .trash-delete { background: #fbeeea; color: #b5462f; }
 .trash-delete:hover { background: #b5462f; color: var(--white); }
+
+/* =========================================================
+   카메라 촬영 · 다시 촬영 · 상세 헤더/작성자 · 당겨서 새로고침
+   ========================================================= */
+
+/* ---- 라이브 카메라 모달 ---- */
+.camera-modal {
+    position: fixed; inset: 0; z-index: 4500;
+    background: #000; display: flex; align-items: center; justify-content: center;
+    animation: backdropIn 0.2s ease;
+}
+.camera-modal video {
+    width: 100%; height: 100%; object-fit: cover; background: #000;
+}
+.camera-topbar {
+    position: absolute; top: 0; left: 0; right: 0; z-index: 2;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: calc(14px + env(safe-area-inset-top)) 18px 14px;
+    background: linear-gradient(to bottom, rgba(0,0,0,0.45), transparent);
+}
+.camera-title { color: #fff; font-size: 1rem; font-weight: 600; letter-spacing: 0.3px; }
+.camera-x, .camera-switch {
+    width: 42px; height: 42px; border-radius: 50%; border: none; cursor: pointer;
+    background: rgba(255,255,255,0.16); color: #fff; font-size: 1.3rem; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.2s;
+}
+.camera-x:hover, .camera-switch:hover { background: rgba(255,255,255,0.3); }
+.camera-bottombar {
+    position: absolute; bottom: 0; left: 0; right: 0; z-index: 2;
+    display: flex; align-items: center; justify-content: center;
+    padding: 0 0 calc(34px + env(safe-area-inset-bottom));
+    background: linear-gradient(to top, rgba(0,0,0,0.5), transparent);
+    padding-top: 40px;
+}
+.camera-shutter {
+    width: 74px; height: 74px; border-radius: 50%; cursor: pointer;
+    background: #fff; border: 5px solid rgba(255,255,255,0.55);
+    box-shadow: 0 0 0 2px rgba(0,0,0,0.15);
+    transition: transform 0.12s ease;
+}
+.camera-shutter:active { transform: scale(0.9); }
+.camera-loading {
+    position: absolute; z-index: 3; color: #fff; font-size: 0.95rem;
+    background: rgba(0,0,0,0.5); padding: 10px 20px; border-radius: 20px;
+}
+
+/* ---- 다시 촬영하기 버튼 (작성 폼) ---- */
+.retake-photo-btn {
+    display: block; width: 100%; margin: -6px 0 14px;
+    background: var(--gray-100); color: var(--primary-dark);
+    border: 1px solid var(--gray-200); border-radius: 14px;
+    padding: 11px; font-size: 0.9rem; font-weight: 600;
+    font-family: var(--font-main); cursor: pointer; transition: all 0.18s ease;
+}
+.retake-photo-btn:hover { background: var(--primary-light); }
+.retake-photo-btn:active { transform: scale(0.98); }
+
+/* ---- 상세 헤더: 수정/휴지통 버튼을 '추억 상세' 자리에 작게 ---- */
+.detail-modal-header { align-items: center; }
+.detail-header-actions { display: flex; gap: 8px; align-items: center; }
+.detail-modal-header .detail-edit-btn,
+.detail-modal-header .detail-trash-btn {
+    margin: 0; padding: 7px 12px; font-size: 0.8rem; font-weight: 600;
+    border-radius: 10px; border: none; cursor: pointer; font-family: var(--font-main);
+    line-height: 1; transition: all 0.18s ease;
+}
+.detail-modal-header .detail-edit-btn { background: var(--primary-light); color: var(--primary-dark); }
+.detail-modal-header .detail-edit-btn:hover { background: var(--primary); color: #fff; }
+.detail-modal-header .detail-trash-btn { background: #fbeeea; color: #b5462f; padding: 7px 11px; }
+.detail-modal-header .detail-trash-btn:hover { background: #f3d9d2; }
+
+/* ---- 상세: 작성자 (제목 아래, 작게) ---- */
+.detail-author {
+    display: flex; align-items: center; gap: 8px;
+    margin: 2px 0 12px;
+}
+.da-avatar {
+    width: 26px; height: 26px; border-radius: 50%;
+    background-size: cover; background-position: center;
+    background-color: var(--gray-100); border: 1px solid var(--gray-200);
+    cursor: zoom-in; flex-shrink: 0;
+    transition: transform 0.15s ease;
+}
+.da-avatar:hover { transform: scale(1.08); }
+.da-name { font-size: 0.82rem; font-weight: 600; color: var(--gray-500); }
+
+/* 댓글 프로필도 확대 가능 표시 */
+.c-avatar { cursor: zoom-in; }
+
+/* ---- 당겨서 새로고침 인디케이터 ---- */
+#ptr-indicator {
+    position: fixed; top: 0; left: 50%;
+    transform: translateX(-50%) translateY(-10px);
+    z-index: 3000; width: 40px; height: 40px; border-radius: 50%;
+    background: var(--white); box-shadow: var(--shadow-md);
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.2s ease, transform 0.25s var(--ease-soft);
+}
+#ptr-indicator.visible { opacity: 1; }
+.ptr-spinner {
+    width: 20px; height: 20px; border-radius: 50%;
+    border: 2.5px solid var(--gray-200); border-top-color: var(--primary);
+}
+#ptr-indicator.refreshing .ptr-spinner { animation: ptrSpin 0.7s linear infinite; }
+@keyframes ptrSpin { to { transform: rotate(360deg); } }
