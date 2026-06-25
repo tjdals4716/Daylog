@@ -182,7 +182,7 @@ const Daylog = {
 const CHECKLIST_TYPES = {
     CAFE: { label: '카페',  emoji: '☕', color: '#b06a4f' },
     FOOD: { label: '식당',  emoji: '🍴', color: '#c0563f' },
-    SPOT: { label: '명소',  emoji: '📍', color: '#3f7fb0' },
+    SPOT: { label: '장소',  emoji: '📍', color: '#3f7fb0' },
     ETC:  { label: '기타',  emoji: '✨', color: '#7a756e' }
 };
 function checklistType(t) { return CHECKLIST_TYPES[t] || CHECKLIST_TYPES.ETC; }
@@ -1190,7 +1190,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const action = document.getElementById('btn-map-action');
         const isCl = (mapMode === 'checklist');
         if (toggle) {
-            toggle.innerText = isCl ? '💖 추억 보기' : '📌 체크리스트';
+            toggle.innerText = isCl ? '📸 추억 보기' : '📌 체크리스트';
             // 전환 대상에 따라 색 구분: 추억 보기=메모리색 / 체크리스트=가볼곳색
             toggle.classList.toggle('to-memory', isCl);
             toggle.classList.toggle('to-checklist', !isCl);
