@@ -263,6 +263,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let _clFilter = 'ALL';         // 가볼곳 카테고리 필터
     let _clVisitedFilter = 'ALL';  // 가볼곳 방문여부 필터 (ALL | VISITED | TODO)
     let _tlPlaceFilter = '';       // 타임라인 장소(placeName) 필터 (''=전체)
+    let _tlKeyword = '';           // 타임라인 검색어 (제목/내용/위치)
+    let _clKeyword = '';           // 가볼곳 검색어 (제목/내용/위치)
 
     const currentUid = getUid();
 
@@ -1385,11 +1387,22 @@ document.addEventListener('DOMContentLoaded', () => {
     function applyTimelineFilter() {
         const dateEl = document.getElementById('tl-filter-date');
         const day = (dateEl && dateEl.value) ? dateEl.value : '';
+        const kw = _tlKeyword.trim().toLowerCase();
         let list = [...memoryList].sort(sortByDateDesc);
+        if (kw) list = list.filter(m => {
+            const hay = ((m.title || '') + ' ' + (m.content || '') + ' ' + (m.placeName || '') + ' ' + (m.address || '')).toLowerCase();
+            return hay.includes(kw);
+        });
         if (_tlPlaceFilter) list = list.filter(m => (m.placeName || '').trim() === _tlPlaceFilter);
         if (day) list = list.filter(m => (m.createdAt || '').substring(0, 10) === day);
         renderTimeline(list);
     }
+    // 검색어(제목/내용/위치) 검색
+    const tlKw = document.getElementById('tl-filter-keyword');
+    const tlKwBtn = document.getElementById('tl-keyword-search');
+    const runTlKeyword = () => { _tlKeyword = tlKw ? tlKw.value : ''; applyTimelineFilter(); };
+    if (tlKwBtn) tlKwBtn.addEventListener('click', runTlKeyword);
+    if (tlKw) tlKw.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); runTlKeyword(); } });
     const tlFilterToggle = document.getElementById('tl-filter-toggle');
     const tlFilterBar = document.getElementById('tl-filter-bar');
     if (tlFilterToggle && tlFilterBar) {
@@ -1405,19 +1418,32 @@ document.addEventListener('DOMContentLoaded', () => {
     const tlFilterReset = document.getElementById('tl-filter-reset');
     if (tlFilterReset) tlFilterReset.addEventListener('click', () => {
         _tlPlaceFilter = '';
+        _tlKeyword = '';
+        const kwEl = document.getElementById('tl-filter-keyword'); if (kwEl) kwEl.value = '';
         const sel = document.getElementById('tl-filter-place'); if (sel) sel.value = '';
         const d = document.getElementById('tl-filter-date'); if (d) d.value = '';
         applyTimelineFilter();
     });
 
-    // ---- 가볼곳 필터 (카테고리 + 방문여부) ----
+    // ---- 가볼곳 필터 (검색어 + 카테고리 + 방문여부) ----
     function applyChecklistFilter() {
+        const kw = _clKeyword.trim().toLowerCase();
         let list = [...checklistList].sort(sortByDateDesc);
+        if (kw) list = list.filter(c => {
+            const hay = ((c.title || '') + ' ' + (c.content || '') + ' ' + (c.placeName || '') + ' ' + (c.address || '')).toLowerCase();
+            return hay.includes(kw);
+        });
         if (_clFilter && _clFilter !== 'ALL') list = list.filter(c => (c.type || 'ETC') === _clFilter);
         if (_clVisitedFilter === 'VISITED') list = list.filter(c => c.visited);
         else if (_clVisitedFilter === 'TODO') list = list.filter(c => !c.visited);
         renderChecklistFeed(list);
     }
+    // 검색어(제목/내용/위치) 검색
+    const clKw = document.getElementById('cl-filter-keyword');
+    const clKwBtn = document.getElementById('cl-keyword-search');
+    const runClKeyword = () => { _clKeyword = clKw ? clKw.value : ''; applyChecklistFilter(); };
+    if (clKwBtn) clKwBtn.addEventListener('click', runClKeyword);
+    if (clKw) clKw.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); runClKeyword(); } });
     const clFilterBar = document.getElementById('cl-filter-bar');
     if (clFilterBar) {
         clFilterBar.querySelectorAll('.cl-filter-chip').forEach(chip => {

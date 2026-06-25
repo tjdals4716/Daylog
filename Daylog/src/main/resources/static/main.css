@@ -1499,3 +1499,16 @@ input[type="date"]::-webkit-date-and-time-value {
 }
 .logout-menu-btn:hover { background: var(--gray-50); color: #b5462f; border-color: #e9d2cb; }
 .logout-menu-btn:active { transform: scale(0.98); }
+
+/* ---- 검색어(제목/내용/위치) 검색 행 (타임라인 · 가볼곳 공용) ---- */
+.filter-search-row { display: flex; gap: 8px; align-items: center; }
+.filter-search-row input[type="text"] {
+    flex: 1 1 auto; width: auto; min-width: 0;
+    border: 1px solid var(--gray-200); border-radius: 10px;
+    padding: 10px 12px; font-size: 0.9rem; font-family: var(--font-main);
+    background: var(--gray-50); color: var(--gray-800); outline: none;
+    transition: border 0.2s, background 0.2s;
+}
+.filter-search-row input[type="text"]:focus { border-color: var(--primary); background: var(--white); }
+.filter-search-row .filter-search-btn { flex: 0 0 64px; }
+.cl-search-row { margin-bottom: 10px; }
