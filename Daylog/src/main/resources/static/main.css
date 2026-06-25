@@ -72,6 +72,14 @@ body[data-active-tab="tab-map"] .dday-counter { display: none; }
 /* 위치 선택 모드 동안에는 헤더 컨트롤 숨김 */
 body.picking .header-map-controls { display: none !important; }
 
+/* 생성/위치 선택 모드: 검색창을 헤더에 표시 (로고 숨기고 가로로 채움) */
+.header-pick-search { display: none; flex: 1 1 auto; min-width: 0; align-items: center; }
+body.picking #header-pick-search { display: flex; }
+body.picking .logo { display: none; }
+body.picking .navbar { z-index: 700; } /* 검색/추천 드롭다운이 지도 오버레이(600) 위로 */
+.header-pick-search .lm-search { width: 100%; animation: none; box-shadow: var(--shadow-sm); }
+.header-pick-search .lm-suggestions { z-index: 720; }
+
 /* 헤더 안의 타임라인 검색 버튼 — 타임라인 탭에서만 오른쪽에 노출 */
 .header-timeline-controls { display: none; align-items: center; }
 body[data-active-tab="tab-timeline"] .header-timeline-controls { display: flex; margin-left: auto; }

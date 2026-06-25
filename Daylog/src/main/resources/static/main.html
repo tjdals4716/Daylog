@@ -26,6 +26,14 @@
     <div id="header-checklist-controls" class="header-checklist-controls">
         <button type="button" id="cl-filter-toggle" class="filter-toggle-btn">🔍 검색</button>
     </div>
+    <div id="header-pick-search" class="header-pick-search">
+        <div class="lm-search">
+            <span class="lm-search-icon">🔍</span>
+            <input type="text" id="lm-search-input" placeholder="장소·상세주소 검색 (예: 강남대로 396)" autocomplete="off">
+            <button type="button" id="lm-search-btn">검색</button>
+            <ul id="lm-suggestions" class="lm-suggestions hidden"></ul>
+        </div>
+    </div>
     <div class="dday-counter">
         <span class="heart-icon"></span> D +<span id="dday-count">0</span>
     </div>
@@ -40,18 +48,10 @@
         <div class="map-wrapper" id="map-wrapper">
             <div id="naver-map"></div>
 
-            <!-- 위치 선택 모드 오버레이 -->
+            <!-- 위치 선택 모드 오버레이 (검색창은 헤더로 이동) -->
             <div id="location-mode" class="location-mode hidden">
                 <div class="lm-vignette"></div>
                 <div class="lm-reticle"></div>
-                <div class="lm-top">
-                    <div class="lm-search">
-                        <span class="lm-search-icon">🔍</span>
-                        <input type="text" id="lm-search-input" placeholder="장소·상세주소 검색 (예: 강남대로 396)" autocomplete="off">
-                        <button type="button" id="lm-search-btn">검색</button>
-                        <ul id="lm-suggestions" class="lm-suggestions hidden"></ul>
-                    </div>
-                </div>
                 <div class="lm-bottom">
                     <div class="lm-banner" id="lm-center-label">
                         <span class="lm-pin">📍</span> 지도를 움직여 중앙에 위치를 맞춰주세요
