@@ -250,6 +250,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let selectedFile = null;
     let currentLatLng = null;
     let currentLocationMeta = { placeName: '', address: '' }; // 장소명/상세주소 캡처
+    let pendingPlaceTitle = '';     // 장소 검색으로 고른 상호명(체크리스트 제목 자동입력용)
     let isWaitingForMapClick = false;
     let mapClickListener = null;
     let memoryList = [];
@@ -414,6 +415,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function enterPickMode() {
         isWaitingForMapClick = true;
+        pendingPlaceTitle = '';
         locationMode.classList.remove('hidden');
         mapWrapper.classList.add('picking');
         document.body.classList.add('picking');
@@ -581,40 +583,52 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function setLocationFromItem(item) {
-        const lat = parseFloat(item.y);
-        const lng = parseFloat(item.x);
-        if (isNaN(lat) || isNaN(lng)) { showToast('좌표 조회 실패'); return; }
-        currentLatLng = { lat: lat, lng: lng };
-
-        // 모달 뒤로 위치가 보이도록 지도 이동
-        map.setCenter(new naver.maps.LatLng(lat, lng));
-        map.setZoom(16);
-
         const addr = item.roadAddress || item.jibunAddress || '';
-        // 큰 영역(시/도 + 시·군·구)과 상세 주소로 분리해 저장
-        currentLocationMeta = splitKoreanAddress(addr);
+        const placeName = item.name || '';
+        const finalize = (lat, lng) => {
+            if (isNaN(lat) || isNaN(lng)) { showToast('좌표 조회 실패'); return; }
+            currentLatLng = { lat: lat, lng: lng };
+            map.setCenter(new naver.maps.LatLng(lat, lng));
+            map.setZoom(17);
+            currentLocationMeta = splitKoreanAddress(addr);
+            pendingPlaceTitle = placeName; // 체크리스트 제목 자동입력용
 
-        const badge = document.getElementById('location-status-badge');
-        badge.innerText = "🔍 '" + (addr || '검색 위치') + "' 위치로 설정되었습니다";
-        badge.className = "location-badge manual";
-
-        hideSuggestions();
-        exitPickMode();
-        pickReturnsToForm = false;
-        if (pickTarget === 'checklist') openChecklistModal(); else openMemoryModal();
+            const badge = document.getElementById('location-status-badge');
+            if (badge) {
+                badge.innerText = "🔍 '" + (placeName || addr || '검색 위치') + "' 위치로 설정되었습니다";
+                badge.className = "location-badge manual";
+            }
+            hideSuggestions();
+            exitPickMode();
+            pickReturnsToForm = false;
+            if (pickTarget === 'checklist') openChecklistModal(); else openMemoryModal();
+        };
+        // 도로명 주소를 지오코딩해 정확한 좌표 확보, 실패 시 백엔드가 준 좌표 사용
+        if (addr && window.naver && naver.maps.Service && naver.maps.Service.geocode) {
+            naver.maps.Service.geocode({ query: addr }, (status, response) => {
+                const a = (status === naver.maps.Service.Status.OK && response.v2 && response.v2.addresses && response.v2.addresses[0]) || null;
+                if (a) finalize(parseFloat(a.y), parseFloat(a.x));
+                else if (item.lat != null && item.lng != null) finalize(parseFloat(item.lat), parseFloat(item.lng));
+                else showToast('좌표 조회 실패');
+            });
+        } else if (item.lat != null && item.lng != null) {
+            finalize(parseFloat(item.lat), parseFloat(item.lng));
+        } else { showToast('좌표 조회 실패'); }
     }
 
-    function renderSuggestions(addresses) {
+    // 장소(상호명) 검색 결과 렌더 — 이름 + 그 하위에 도로명 주소
+    function renderSuggestions(items) {
         if (!suggestBox) return;
-        lastSuggestions = addresses;
+        lastSuggestions = items;
         suggestBox.innerHTML = '';
-        addresses.forEach((item) => {
-            const main = item.roadAddress || item.jibunAddress || '주소 정보 없음';
-            const sub = (item.roadAddress && item.jibunAddress && item.roadAddress !== item.jibunAddress)
-                ? item.jibunAddress : '';
+        items.forEach((item) => {
+            const name = item.name || '(이름 없음)';
+            const addr = item.roadAddress || item.jibunAddress || '주소 정보 없음';
+            const cat = item.category ? '<span class="sg-cat">' + escapeHtml(item.category) + '</span>' : '';
             const li = document.createElement('li');
-            li.innerHTML = '<span class="sg-main">' + escapeHtml(main) + '</span>' +
-                (sub ? '<span class="sg-sub">' + escapeHtml(sub) + '</span>' : '');
+            li.innerHTML =
+                '<span class="sg-main">' + escapeHtml(name) + cat + '</span>' +
+                '<span class="sg-sub">' + escapeHtml(addr) + '</span>';
             li.addEventListener('click', () => setLocationFromItem(item));
             suggestBox.appendChild(li);
         });
@@ -628,30 +642,35 @@ document.addEventListener('DOMContentLoaded', () => {
         lastSuggestions = [];
     }
 
+    // 백엔드 프록시(네이버 지역검색)로 상호명/장소 검색
+    function searchPlaces(query) {
+        return fetch(`${API_BASE_URL}/api/search/place?query=${encodeURIComponent(query)}`, { headers: authHeaders(true) })
+            .then(handleResponse)
+            .then(items => Array.isArray(items) ? items : []);
+    }
+
     // 입력 중 연관 검색어 조회 (디바운스)
     function fetchSuggestions(query) {
-        if (!map || !(window.naver && naver.maps.Service)) return;
-        naver.maps.Service.geocode({ query: query }, (status, response) => {
-            if ((searchInput.value || '').trim().length < 2) { hideSuggestions(); return; }
-            if (status !== naver.maps.Service.Status.OK) { hideSuggestions(); return; }
-            const addresses = response.v2 && response.v2.addresses;
-            if (!addresses || addresses.length === 0) { showEmptySuggestion(); return; }
-            renderSuggestions(addresses.slice(0, 6));
-        });
+        searchPlaces(query)
+            .then(items => {
+                if ((searchInput.value || '').trim().length < 2) { hideSuggestions(); return; }
+                if (!items.length) { showEmptySuggestion(); return; }
+                renderSuggestions(items);
+            })
+            .catch(() => hideSuggestions());
     }
 
     // 검색 버튼/Enter: 떠 있는 후보 중 첫 번째 선택, 없으면 직접 조회
     function runSearch() {
         const query = (searchInput.value || '').trim();
-        if (!query) { showToast('검색할 주소를 입력해주세요'); return; }
-        if (!map || !(window.naver && naver.maps.Service)) { showToast('지도가 아직 준비되지 않음'); return; }
+        if (!query) { showToast('검색어를 입력해주세요'); return; }
         if (lastSuggestions.length > 0) { setLocationFromItem(lastSuggestions[0]); return; }
-        naver.maps.Service.geocode({ query: query }, (status, response) => {
-            if (status !== naver.maps.Service.Status.OK) { showToast('주소 검색에 실패함'); return; }
-            const addresses = response.v2 && response.v2.addresses;
-            if (!addresses || addresses.length === 0) { showToast('검색 결과가 없음. 다른 키워드로 시도해보세요.'); return; }
-            setLocationFromItem(addresses[0]);
-        });
+        searchPlaces(query)
+            .then(items => {
+                if (!items.length) { showToast('검색 결과가 없음. 다른 키워드로 시도해보세요.'); return; }
+                setLocationFromItem(items[0]);
+            })
+            .catch(() => showToast('검색에 실패했습니다.'));
     }
 
     if (searchInput) {
@@ -1253,6 +1272,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             }
         }
+        // 장소 검색으로 고른 경우 제목을 상호명으로 자동 입력 (사용자가 비워둔 경우에만)
+        const titleEl = document.getElementById('cl-title');
+        if (titleEl && pendingPlaceTitle && !titleEl.value.trim()) {
+            titleEl.value = pendingPlaceTitle;
+        }
+        pendingPlaceTitle = '';
     };
 
     // 가볼곳 추가 버튼 → 위치 선택 모드 진입 (체크리스트용)
@@ -2186,7 +2211,7 @@ function openChecklistDetail(item) {
     if (headerActions) {
         headerActions.innerHTML = isOwner
             ? '<button type="button" class="detail-edit-btn" id="cl-detail-edit-open">✏️ 수정</button>' +
-            '<button type="button" class="detail-trash-btn" id="cl-detail-del-open">🗑️</button>'
+              '<button type="button" class="detail-trash-btn" id="cl-detail-del-open">🗑️</button>'
             : '';
     }
 
@@ -2369,7 +2394,7 @@ function openDetailModal(memory) {
     if (headerActions) {
         headerActions.innerHTML = isOwner
             ? '<button type="button" class="detail-edit-btn" id="detail-edit-open">✏️ 수정</button>' +
-            '<button type="button" class="detail-trash-btn" id="detail-trash-open">🗑️</button>'
+              '<button type="button" class="detail-trash-btn" id="detail-trash-open">🗑️</button>'
             : '';
     }
 

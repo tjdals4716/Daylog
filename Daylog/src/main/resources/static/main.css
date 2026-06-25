@@ -243,7 +243,8 @@ body[data-active-tab="tab-profile"] #btn-logout { margin-left: auto; }
 }
 .lm-suggestions li:last-child { border-bottom: none; }
 .lm-suggestions li:hover, .lm-suggestions li.active { background: var(--gray-50); }
-.lm-suggestions .sg-main { font-size: 0.9rem; font-weight: 600; color: var(--gray-800); }
+.lm-suggestions .sg-main { font-size: 0.9rem; font-weight: 600; color: var(--gray-800); display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.lm-suggestions .sg-cat { font-size: 0.72rem; font-weight: 500; color: var(--primary); }
 .lm-suggestions .sg-sub { font-size: 0.78rem; color: var(--gray-400); }
 .lm-suggestions .sg-empty { color: var(--gray-400); font-size: 0.88rem; cursor: default; text-align: center; }
 .lm-suggestions .sg-empty:hover { background: var(--white); }
