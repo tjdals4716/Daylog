@@ -250,7 +250,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let selectedFile = null;
     let currentLatLng = null;
     let currentLocationMeta = { placeName: '', address: '' }; // 장소명/상세주소 캡처
-    let pendingPlaceTitle = '';     // 장소 검색으로 고른 상호명(체크리스트 제목 자동입력용)
+    window._pendingPlaceTitle = '';   // 장소 검색으로 고른 상호명(제목 자동입력용 · 추억/체크리스트 공용)
     let isWaitingForMapClick = false;
     let mapClickListener = null;
     let memoryList = [];
@@ -415,7 +415,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function enterPickMode() {
         isWaitingForMapClick = true;
-        pendingPlaceTitle = '';
+        window._pendingPlaceTitle = '';
         locationMode.classList.remove('hidden');
         mapWrapper.classList.add('picking');
         document.body.classList.add('picking');
@@ -591,7 +591,7 @@ document.addEventListener('DOMContentLoaded', () => {
             map.setCenter(new naver.maps.LatLng(lat, lng));
             map.setZoom(17);
             currentLocationMeta = splitKoreanAddress(addr);
-            pendingPlaceTitle = placeName; // 체크리스트 제목 자동입력용
+            window._pendingPlaceTitle = placeName; // 제목 자동입력용 (추억/체크리스트 공용)
 
             const badge = document.getElementById('location-status-badge');
             if (badge) {
@@ -1274,10 +1274,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         // 장소 검색으로 고른 경우 제목을 상호명으로 자동 입력 (사용자가 비워둔 경우에만)
         const titleEl = document.getElementById('cl-title');
-        if (titleEl && pendingPlaceTitle && !titleEl.value.trim()) {
-            titleEl.value = pendingPlaceTitle;
+        if (titleEl && window._pendingPlaceTitle && !titleEl.value.trim()) {
+            titleEl.value = window._pendingPlaceTitle;
         }
-        pendingPlaceTitle = '';
+        window._pendingPlaceTitle = '';
     };
 
     // 가볼곳 추가 버튼 → 위치 선택 모드 진입 (체크리스트용)
@@ -1295,6 +1295,14 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!title) { showToast('제목을 입력해주세요'); return; }
         const visited = document.getElementById('cl-visited').checked;
         const visitedDate = document.getElementById('cl-visited-date').value;
+        const imgInput = document.getElementById('cl-image');
+        const hasImage = !!(imgInput && imgInput.files && imgInput.files[0]);
+        // '다녀왔어요'가 체크된 경우 이미지는 필수
+        if (visited && !hasImage) {
+            showToast('다녀왔어요로 표시하려면 사진을 첨부해주세요');
+            alert('다녀온 곳은 사진을 반드시 첨부해야 합니다.');
+            return;
+        }
         const dto = {
             title: title,
             content: document.getElementById('cl-content').value,
@@ -1309,8 +1317,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const fd = new FormData();
         fd.append('uid', currentUid);
         fd.append('checklistData', JSON.stringify(dto));
-        const imgInput = document.getElementById('cl-image');
-        if (imgInput && imgInput.files && imgInput.files[0]) fd.append('mediaData', imgInput.files[0]);
+        if (hasImage) fd.append('mediaData', imgInput.files[0]);
 
         const submitBtn = document.querySelector('#checklist-form .submit-btn');
         if (submitBtn) { submitBtn.disabled = true; submitBtn.innerText = '추가하는 중...'; }
@@ -2122,6 +2129,12 @@ function openMemoryModal() {
     modal.classList.remove('hidden');
     const d = document.getElementById('memory-date');
     if (!d.value) d.value = new Date().toISOString().substring(0, 10);
+    // 장소 검색으로 고른 경우 제목을 상호명으로 자동 입력 (비어 있을 때만)
+    const titleEl = document.getElementById('memory-title');
+    if (titleEl && window._pendingPlaceTitle && !titleEl.value.trim()) {
+        titleEl.value = window._pendingPlaceTitle;
+    }
+    window._pendingPlaceTitle = '';
 }
 
 function closeMemoryModal() {
@@ -2500,7 +2513,7 @@ function saveDetailEdit() {
     const date = document.getElementById('edit-memory-date').value;
     const title = document.getElementById('edit-memory-title').value.trim();
     const content = document.getElementById('edit-memory-content').value.trim();
-    if (!title || !content) { showToast('제목과 내용을 입력해주세요'); return; }
+    if (!title) { showToast('제목을 입력해주세요'); return; }
 
     const payload = {
         title: title,
