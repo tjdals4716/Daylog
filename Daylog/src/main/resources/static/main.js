@@ -96,7 +96,7 @@ async function handleResponse(res) {
     }
 
     if (res.status === 500) {
-        redirectToLogin('500(nternal Server Error) 에러 발생. 관리자에게 문의하세요.');
+        redirectToLogin('500(Internal Server Error) 에러 발생. 관리자에게 문의하세요.');
         throw new Error('인증 만료 또는 서버 에러 발생');
     }
 
