@@ -357,6 +357,7 @@ document.addEventListener('DOMContentLoaded', () => {
             item.classList.add('active');
             const targetTab = item.getAttribute('data-tab');
             if (!targetTab) return;
+            document.body.setAttribute('data-active-tab', targetTab);
             tabContents.forEach(tab => {
                 const show = (tab.id === targetTab);
                 tab.style.display = show ? 'block' : 'none';
@@ -409,6 +410,7 @@ document.addEventListener('DOMContentLoaded', () => {
         isWaitingForMapClick = true;
         locationMode.classList.remove('hidden');
         mapWrapper.classList.add('picking');
+        document.body.classList.add('picking');
 
         // 지도를 탭하면 그 지점으로 중앙(점)을 이동 — 확정은 버튼으로
         if (mapClickListener) naver.maps.Event.removeListener(mapClickListener);
@@ -503,6 +505,7 @@ document.addEventListener('DOMContentLoaded', () => {
         isWaitingForMapClick = false;
         locationMode.classList.add('hidden');
         mapWrapper.classList.remove('picking');
+        document.body.classList.remove('picking');
         const si = document.getElementById('lm-search-input');
         if (si) si.value = '';
         const sg = document.getElementById('lm-suggestions');
@@ -1143,7 +1146,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const marker = new naver.maps.Marker({
                 position: new naver.maps.LatLng(item.lat, item.lng),
                 map: map,
-                icon: { content: markerHtml, anchor: new naver.maps.Point(16, 38) }
+                icon: { content: markerHtml, anchor: new naver.maps.Point(14, 32) }
             });
             marker._checklistId = item.id;
             naver.maps.Event.addListener(marker, 'click', () => openChecklistDetail(item));
