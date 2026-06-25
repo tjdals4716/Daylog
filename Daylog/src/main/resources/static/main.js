@@ -1094,7 +1094,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // '우리의 추억' / '~의 추억' 리스트 모달 당겨서 새로고침 (가로 드래그는 CSS로 잠금)
     const listScroll = document.querySelector('#list-modal .list-modal-body');
     attachPullToRefresh(listScroll,
-        () => !document.getElementById('list-modal').classList.contains('hidden'),
+        () => {
+            const m = document.getElementById('list-modal');
+            return !m.classList.contains('hidden') && !m.classList.contains('dday-mode');
+        },
         () => Promise.resolve(loadMemoriesFromServer()).then(() => {
             if (Daylog._openListKind) openStatList(Daylog._openListKind);
         }),
@@ -1794,6 +1797,12 @@ document.addEventListener('DOMContentLoaded', () => {
     if (btnProfileLogout) btnProfileLogout.addEventListener('click', () => {
         if (confirm('로그아웃을 진행합니다.')) redirectToLogin('로그아웃 되었습니다.');
     });
+    // 헤더의 디데이 클릭 → 디데이 폼 열기
+    const headerDday = document.querySelector('.dday-counter');
+    if (headerDday) {
+        headerDday.style.cursor = 'pointer';
+        headerDday.addEventListener('click', () => showDDayInfo());
+    }
     document.getElementById('edit-back').addEventListener('click', closeEditPage);
     document.getElementById('edit-avatar-wrap').addEventListener('click', () => editFileInput.click());
 
@@ -2830,6 +2839,7 @@ function openMemoryListModal(title, items) {
     const titleEl = document.getElementById('list-modal-title');
     const body = document.getElementById('list-modal-body');
     if (!modal || !body) return;
+    modal.classList.remove('dday-mode');
     titleEl.textContent = title;
     body.innerHTML = '';
 
@@ -2860,7 +2870,7 @@ function openMemoryListModal(title, items) {
 
 function closeListModal() {
     const modal = document.getElementById('list-modal');
-    if (modal) modal.classList.add('hidden');
+    if (modal) { modal.classList.add('hidden'); modal.classList.remove('dday-mode'); }
     Daylog._openListKind = null;
 }
 
@@ -2870,6 +2880,7 @@ function openChecklistListModal(title, items) {
     const titleEl = document.getElementById('list-modal-title');
     const body = document.getElementById('list-modal-body');
     if (!modal || !body) return;
+    modal.classList.remove('dday-mode');
     Daylog._openListKind = null; // 새로고침 시 추억 목록 재구성 로직과 분리
     titleEl.textContent = title;
     body.innerHTML = '';
@@ -2919,6 +2930,9 @@ function showDDayInfo() {
         '<div class="dday-info-date">' + y + '년 ' + m + '월 ' + d + '일</div>' +
         '<div class="dday-info-count">오늘로 <b>D+' + n + '</b> 일째</div>' +
         '</div>';
+    Daylog._openListKind = null;
+    modal.classList.add('dday-mode'); // 디데이 폼 내부는 드래그(당겨서 새로고침) 비활성
+    if (body) body.scrollTop = 0;
     modal.classList.remove('hidden');
 }
 

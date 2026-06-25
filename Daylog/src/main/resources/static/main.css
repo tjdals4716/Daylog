@@ -409,7 +409,7 @@ body[data-active-tab="tab-profile"] #btn-logout { margin-left: auto; }
 .edit-profile-btn {
     width: 100%; padding: 14px; border-radius: 14px; cursor: pointer;
     background: var(--white); color: var(--primary-dark); border: 1px solid var(--primary-light);
-    font-size: 0.95rem; font-weight: 600; margin-bottom: 16px;
+    font-size: 0.95rem; font-weight: 600; margin: 10px 0 0;
     transition: background 0.2s, transform 0.15s;
 }
 .edit-profile-btn:hover { background: var(--gray-50); }
