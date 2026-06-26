@@ -47,6 +47,7 @@
     <section id="tab-map" class="tab-content active">
         <div class="map-wrapper" id="map-wrapper">
             <div id="naver-map"></div>
+            <button type="button" id="btn-my-location" class="my-location-btn" title="현재 위치로 이동" aria-label="현재 위치로 이동">📍</button>
 
             <!-- 위치 선택 모드 오버레이 (검색창은 헤더로 이동) -->
             <div id="location-mode" class="location-mode hidden">
@@ -275,7 +276,7 @@
                 <label>내용</label>
                 <textarea id="edit-memory-content" rows="5" placeholder="이야기를 작성하세요 (선택)"></textarea>
             </div>
-            <p class="detail-edit-note">※ 사진과 위치는 수정이 불가합니다.</p>
+            <p class="detail-edit-note">※ 사진과 위치는 수정할 수 없어요.</p>
             <div class="detail-edit-actions">
                 <button type="button" id="detail-edit-cancel" class="cancel-edit-btn">취소</button>
                 <button type="submit" class="submit-btn">저장하기 ✨</button>
@@ -296,7 +297,7 @@
             <button type="button" id="cl-reset-location" class="reset-location-btn">📍 위치 다시 설정하기</button>
 
             <div class="form-group">
-                <label>카테고리</label>
+                <label>타입</label>
                 <div class="cl-type-options" id="cl-type-options">
                     <button type="button" class="cl-type-chip" data-type="CAFE">☕ 카페</button>
                     <button type="button" class="cl-type-chip" data-type="FOOD">🍴 식당</button>
@@ -314,7 +315,7 @@
             </div>
             <div class="form-group cl-visited-group">
                 <label class="cl-check-label">
-                    <input type="checkbox" id="cl-visited"> 다녀옴
+                    <input type="checkbox" id="cl-visited"> 다녀왔어요
                 </label>
                 <input type="date" id="cl-visited-date" disabled>
             </div>
@@ -369,11 +370,11 @@
             </div>
             <div class="form-group cl-visited-group">
                 <label class="cl-check-label">
-                    <input type="checkbox" id="cl-edit-visited"> 다녀옴
+                    <input type="checkbox" id="cl-edit-visited"> 다녀왔어요
                 </label>
                 <input type="date" id="cl-edit-visited-date" disabled>
             </div>
-            <p class="detail-edit-note">※ 위치는 수정이 불가합니다.</p>
+            <p class="detail-edit-note">※ 위치는 수정할 수 없어요.</p>
             <div class="detail-edit-actions">
                 <button type="button" id="cl-edit-cancel" class="cancel-edit-btn">취소</button>
                 <button type="submit" class="submit-btn">저장하기 ✨</button>
@@ -445,7 +446,7 @@
             <button type="button" id="pe-rotate" class="pe-btn">↻ 90° 회전</button>
             <button type="button" id="pe-reset" class="pe-btn">⤢ 자르기 초기화</button>
         </div>
-        <p class="pe-hint">모서리를 끌어 자르고, 회전 버튼으로 방향 변경 가능</p>
+        <p class="pe-hint">모서리를 끌어 자르고, 회전 버튼으로 방향을 바꿔요</p>
         <button type="button" class="submit-btn" id="pe-apply">이 사진으로 적용 ✨</button>
     </div>
 </div>

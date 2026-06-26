@@ -36,6 +36,11 @@ public class SearchService {
     private final ObjectMapper mapper = new ObjectMapper();
 
     public List<PlaceDTO> searchPlace(String query) {
+        return searchPlace(query, null, null);
+    }
+
+    // lat/lng(지도 중심)이 주어지면 그 위치에서 가까운 순으로 정렬한다.
+    public List<PlaceDTO> searchPlace(String query, Double centerLat, Double centerLng) {
         if (query == null || query.trim().isEmpty()) return Collections.emptyList();
 
         String clientId = naverProps.getClientId();
@@ -89,12 +94,30 @@ public class SearchService {
                             .build());
                 }
             }
+            // 지도 중심 좌표가 있으면 가까운 순으로 정렬 (좌표 없는 항목은 뒤로)
+            if (centerLat != null && centerLng != null) {
+                result.sort((a, b) -> Double.compare(
+                        distanceKm(centerLat, centerLng, a.getLat(), a.getLng()),
+                        distanceKm(centerLat, centerLng, b.getLat(), b.getLng())));
+            }
             return result;
         } catch (RuntimeException re) {
             throw re;
         } catch (Exception e) {
             throw new RuntimeException("장소 검색 중 오류: " + e.getMessage(), e);
         }
+    }
+
+    // 두 좌표 사이 거리(km). 좌표가 없으면 매우 큰 값(뒤로 정렬)
+    private double distanceKm(double lat1, double lng1, Double lat2, Double lng2) {
+        if (lat2 == null || lng2 == null) return Double.MAX_VALUE;
+        double R = 6371.0;
+        double dLat = Math.toRadians(lat2 - lat1);
+        double dLng = Math.toRadians(lng2 - lng1);
+        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
+                + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2))
+                * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     }
 
     // 네이버 응답의 title 은 <b> 태그/HTML 엔티티가 섞여 있어 제거
