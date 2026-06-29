@@ -534,6 +534,12 @@ document.addEventListener('DOMContentLoaded', () => {
     let centerLabelTimer = null;
 
     function enterPickMode() {
+        // [B] edit by smsong - 각 메뉴에서 추가 시작 시 위치 선택을 위해 지도 탭으로 전환
+        if (document.body.getAttribute('data-active-tab') !== 'tab-map') {
+            const _mapNav = document.querySelector('.nav-item[data-tab="tab-map"]');
+            if (_mapNav) _mapNav.click();
+        }
+        // [E] edit by smsong
         isWaitingForMapClick = true;
         window._pendingPlaceTitle = '';
         document.body.classList.remove('map-immersive'); // 헤더(검색창) 필요하므로 몰입모드 해제
@@ -1529,6 +1535,16 @@ document.addEventListener('DOMContentLoaded', () => {
         else { pickTarget = 'memory'; document.getElementById('memory-file').click(); }
     });
 
+    // [B] edit by smsong - 지도 + 버튼 제거 대체: 각 메뉴(타임라인=추억 / 가볼곳=체크리스트)에서 직접 추가
+    const tlAddBtn = document.getElementById('btn-timeline-add');
+    if (tlAddBtn) tlAddBtn.addEventListener('click', () => {
+        pickTarget = 'memory';
+        document.getElementById('memory-file').click(); // 갤러리 → 사진 위치(EXIF)/현재위치 자동, 없으면 지도에서 선택
+    });
+    const clAddBtn = document.getElementById('btn-checklist-add');
+    if (clAddBtn) clAddBtn.addEventListener('click', () => { startChecklistCreate(); });
+    // [E] edit by smsong
+
     // ===== 지도 헤더 필터(➕) — 모드별 폼이 아이콘 아래로 살짝 뜨고, 누르면 즉시 적용 =====
     function closeMapFilterPop() {
         const pop = document.getElementById('map-filter-pop');
@@ -2002,6 +2018,7 @@ document.addEventListener('DOMContentLoaded', () => {
             profileFileInput.value = ''; // 같은 파일 재선택 허용
             if (!file || !editingUser) return;
             const target = editingUser;
+            _crop.sourceInput = profileFileInput; // [B] edit by smsong - 취소(X) 시 갤러리 재오픈용 / [E] edit by smsong
             openCropper(file, (cropped) => uploadProfileImage(target, cropped));
         });
     }
@@ -2098,6 +2115,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const file = e.target.files[0];
         editFileInput.value = '';
         if (!file) return;
+        _crop.sourceInput = editFileInput; // [B] edit by smsong - 취소(X) 시 갤러리 재오픈용 / [E] edit by smsong
         openCropper(file, (cropped) => {
             editPendingFile = cropped;
             editRemovePhoto = false;
@@ -2358,7 +2376,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ===== 사진 편집(크롭/줌) 이벤트 =====
     const cropStage = document.getElementById('crop-stage');
-    document.getElementById('crop-cancel').addEventListener('click', closeCropper);
+    // [B] edit by smsong - 프로필 사진 편집 취소(X) 시 갤러리를 다시 열어 바로 재선택 가능하게
+    document.getElementById('crop-cancel').addEventListener('click', () => {
+        const _src = _crop.sourceInput;
+        closeCropper();
+        if (_src) { try { _src.value = ''; _src.click(); } catch (_) {} }
+    });
+    // [E] edit by smsong
     document.getElementById('crop-apply').addEventListener('click', cropApply);
     document.getElementById('crop-zoom').addEventListener('input', (e) => setCropZoom(parseFloat(e.target.value)));
 
@@ -3311,7 +3335,7 @@ function calculateDDay(start) {
 }
 
 // ===== 사진 편집(크롭/줌) 상태 & 제어 =====
-const _crop = { natW: 0, natH: 0, base: 1, zoom: 1, x: 0, y: 0, size: 0, onDone: null, url: null, dragging: false, sx: 0, sy: 0, bx: 0, by: 0 };
+const _crop = { natW: 0, natH: 0, base: 1, zoom: 1, x: 0, y: 0, size: 0, onDone: null, url: null, dragging: false, sx: 0, sy: 0, bx: 0, by: 0, sourceInput: null /* [smsong] 취소 시 갤러리 재오픈 소스 */ };
 
 function openCropper(file, onDone) {
     const modal = document.getElementById('crop-modal');
@@ -3394,6 +3418,7 @@ function closeCropper() {
     if (modal) modal.classList.add('hidden');
     if (_crop.url) { URL.revokeObjectURL(_crop.url); _crop.url = null; }
     _crop.onDone = null;
+    _crop.sourceInput = null; // [B] edit by smsong - 갤러리 재오픈 소스 정리 / [E] edit by smsong
 }
 
 // ===== 추억 사진 편집기 (자르기 + 회전) =====

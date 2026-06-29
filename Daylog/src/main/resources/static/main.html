@@ -52,7 +52,8 @@
             <button type="button" id="btn-my-location" class="my-location-btn" title="현재 위치로 이동" aria-label="현재 위치로 이동"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;" aria-hidden="true"><path d="M21 10c0 6-9 12-9 12s-9-6-9-12a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg></button>
             <!-- 우측 세로 원형 버튼: (위) 기록/가볼곳 추가 · (아래) 추억↔체크리스트 전환 -->
             <div class="map-fab-stack">
-                <button type="button" class="map-fab action-fab" id="btn-map-action" title="기록 남기기" aria-label="추가"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;color:#fff;" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3l2-3h8l2 3h3a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="3.5"/></svg></button>
+                <!-- [B] edit by smsong - 지도 + (추가) 버튼 제거: 추억/가볼곳 생성은 각 메뉴에서 진행 -->
+                <!-- [E] edit by smsong -->
                 <button type="button" class="map-fab toggle-fab" id="btn-map-toggle" title="체크리스트 보기" aria-label="보기 전환"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;" aria-hidden="true"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg></button>
             </div>
 
@@ -221,6 +222,11 @@
         <span class="nav-text">내 정보</span>
     </a>
 </nav>
+
+<!-- [B] edit by smsong - 각 메뉴 추가 플로팅 버튼 (지도의 + 버튼 대체) -->
+<button type="button" id="btn-timeline-add" class="tab-fab" title="추억 추가" aria-label="추억 추가"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+<button type="button" id="btn-checklist-add" class="tab-fab" title="가볼곳 추가" aria-label="가볼곳 추가"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+<!-- [E] edit by smsong -->
 
 <!-- 추억 작성 모달 -->
 <div id="memory-modal" class="modal hidden">

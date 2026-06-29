@@ -75,6 +75,9 @@ body.picking .header-map-controls { display: none !important; }
 .header-pick-search { display: none; flex: 1 1 auto; min-width: 0; align-items: center; }
 body.picking #header-pick-search { display: flex; }
 body.picking .logo { display: none; }
+/* [B] edit by smsong - 위치 선택/검색 모드: 헤더에 검색창만 노출 (디데이 카운터 숨김) */
+body.picking .dday-counter { display: none !important; }
+/* [E] edit by smsong */
 body.picking .navbar { z-index: 700; } /* 검색/추천 드롭다운이 지도 오버레이(600) 위로 */
 .header-pick-search .lm-search { width: 100%; animation: none; box-shadow: var(--shadow-sm); }
 .header-pick-search .lm-suggestions { z-index: 720; }
@@ -318,6 +321,22 @@ body[data-active-tab="tab-profile"] #btn-logout { margin-left: auto; }
     box-shadow: 0 4px 14px rgba(0,0,0,0.20);
 }
 body.picking .map-fab-stack { display: none; }
+/* [B] edit by smsong - 지도의 + 버튼 제거 대체: 타임라인/가볼곳 메뉴 전용 추가 플로팅 버튼 */
+.map-fab-stack .action-fab { display: none; } /* 지도 + 버튼 비활성 (각 메뉴로 이동) */
+.tab-fab {
+    display: none; position: fixed; right: 20px;
+    bottom: calc(var(--bottom-nav-height) + 20px + env(safe-area-inset-bottom));
+    width: 56px; height: 56px; border-radius: 50%;
+    background: var(--primary); color: #fff; border: none; cursor: pointer; z-index: 90;
+    align-items: center; justify-content: center;
+    box-shadow: 0 6px 18px rgba(176, 137, 104, 0.5);
+    transition: transform 0.16s var(--ease-spring), box-shadow 0.2s;
+}
+.tab-fab:active { transform: scale(0.92); }
+.tab-fab svg { display: block; }
+body[data-active-tab="tab-timeline"] #btn-timeline-add { display: flex; }
+body[data-active-tab="tab-checklist"] #btn-checklist-add { display: flex; }
+/* [E] edit by smsong */
 
 /* 헤더 지도 버튼: 고정 폭(텍스트 전환 시 크기 변동 방지) + 가운데 정렬 */
 .header-map-controls .map-fab { text-align: center; white-space: nowrap; }
@@ -478,7 +497,9 @@ body.picking .map-fab-stack { display: none; }
     width: 100%;             /* [수정] 100vw에서 100%로 변경하여 스크롤바 영역으로 인한 오차 방지 */
     height: 100vh;
     height: 100dvh;          /* 모바일 상/하단 브라우저 UI를 제외한 실제 화면 크기 맞춤 */
-    background: rgba(46, 43, 40, 0.55); backdrop-filter: blur(5px);
+    /* [B] edit by smsong - 안드로이드 모달 깜빡임 해결: backdrop-filter(blur) 합성 오류 제거 → 불투명 딤으로 대체 */
+    background: rgba(40, 37, 34, 0.62);
+    /* [E] edit by smsong */
     display: flex; align-items: center; justify-content: center; padding: 20px;
     animation: backdropIn 0.28s ease;
 }
@@ -491,6 +512,9 @@ body.picking .map-fab-stack { display: none; }
     overflow-x: hidden;      /* [추가] 폼 내부 가로 스크롤 및 드래그 완전 차단 */
     overscroll-behavior-x: none; /* [추가] 모바일 가로 스와이프 시 튕김(바운스) 현상 방지 */
     padding: 24px; box-shadow: var(--shadow-md);
+    /* [B] edit by smsong - 안드로이드 모달 콘텐츠 깜빡임 방지: 독립 합성 레이어로 격리 */
+    transform: translateZ(0); isolation: isolate;
+    /* [E] edit by smsong */
     animation: modalPop 0.4s var(--ease-spring);
 }
 @keyframes modalPop {
@@ -1596,10 +1620,10 @@ html, body { -webkit-font-smoothing: antialiased; }
     -webkit-transform: translateZ(0); transform: translateZ(0);
     -webkit-backface-visibility: hidden; backface-visibility: hidden;
 }
-.map-wrapper, #naver-map {
-    -webkit-transform: translateZ(0); transform: translateZ(0);
-    -webkit-backface-visibility: hidden; backface-visibility: hidden;
-}
+/* [B] edit by smsong - 안드로이드 지도 깜빡임 해결: 지도 캔버스 강제 GPU 승격(translateZ/backface) 제거
+   (네이버 지도가 자체 합성하므로 강제 레이어가 오히려 타일 재합성 깜빡임을 유발함) */
+/* .map-wrapper, #naver-map 레이어 승격은 제거함 */
+/* [E] edit by smsong */
 .container { -webkit-overflow-scrolling: touch; }
 .tab-content { -webkit-backface-visibility: hidden; backface-visibility: hidden; }
 
