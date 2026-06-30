@@ -127,7 +127,7 @@ async function handleResponse(res) {
 // 1-b. 사용자 이름 기반 접근 권한 (송성민 / 강미르 전용)
 // ==========================================
 const AUTH_NAMES = ['송성민', '강미르']; // [smsong] 's s' 제거 — 접근 차단 (관리자 승인 필요)
-const ME_ALIAS = ['송성민', 's s'];             // '나'(송성민)로 취급할 이름
+const ME_ALIAS = ['송성민'];             // '나'(송성민)로 취급할 이름
 
 // 여러 소스(localStorage / JWT)에서 로그인 사용자 name 을 최대한 확보
 function readLocalName() {
@@ -2190,7 +2190,7 @@ document.addEventListener('DOMContentLoaded', () => {
     //  내 정보 (프로필) — 사람 구분 & 프로필 이미지
     // ==========================================
     // name 이 아래 값이면 '나', 아니면 상대방으로 인식 (유저 2명 전용)
-    const ME_NAMES = ['송성민', 's s'];
+    const ME_NAMES = ['송성민'];
     function isMe(u) {
         if (!u || !u.name) return false;
         const n = String(u.name).trim().toLowerCase();
