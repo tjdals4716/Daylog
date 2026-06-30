@@ -43,12 +43,13 @@ public class MemoryService {
                 .orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다"));
     }
 
-    // [B] edit by smsong - 커플(송성민/강미르)은 소유자가 아니어도 모든 추억을 수정·휴지통 이동 가능
-    private static final java.util.Set<String> PRIVILEGED_NICKNAMES = java.util.Set.of("송성민", "강미르");
+    // [B] edit by smsong - 커플(송성민/강미르)은 소유자가 아니어도 모든 추억을 '수정' 가능 (이름(name) 기준)
+    private static final java.util.Set<String> PRIVILEGED_NAMES = java.util.Set.of("송성민", "강미르");
+    private static final int TRASH_RETENTION_DAYS = 30; // 휴지통 보관 후 자동 삭제 기준일
     private boolean isPrivilegedEditor(UserDetails userDetails) {
         if (userDetails == null) return false;
         return userRepository.findByUid(userDetails.getUsername())
-                .map(u -> u.getNickname() != null && PRIVILEGED_NICKNAMES.contains(u.getNickname().trim()))
+                .map(u -> u.getName() != null && PRIVILEGED_NAMES.contains(u.getName().trim()))
                 .orElse(false);
     }
     // [E] edit by smsong
@@ -189,10 +190,9 @@ public class MemoryService {
     private MemoryEntity getOwnedMemory(Long id, UserDetails userDetails) {
         MemoryEntity memory = memoryRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("추억을 찾을 수 없습니다"));
-        // [B] edit by smsong - 소유자 또는 커플(송성민/강미르)이면 휴지통 이동/복원/삭제 가능
+        // [B] edit by smsong - 휴지통 이동/복원/삭제는 '작성자(소유자)'만 가능
         String ownerUid = (memory.getOwner() != null) ? memory.getOwner().getUid() : null;
-        boolean isOwner = (userDetails != null && ownerUid != null && ownerUid.equals(userDetails.getUsername()));
-        if (!isOwner && !isPrivilegedEditor(userDetails)) {
+        if (userDetails == null || ownerUid == null || !ownerUid.equals(userDetails.getUsername())) {
             throw new RuntimeException("권한이 없습니다");
         }
         // [E] edit by smsong
@@ -204,6 +204,7 @@ public class MemoryService {
     public void moveToTrash(Long id, UserDetails userDetails) {
         MemoryEntity memory = getOwnedMemory(id, userDetails);
         memory.setDeleted(true);
+        memory.setTrashedAt(java.time.LocalDateTime.now()); // [smsong] 30일 자동삭제 기준 시각
         memoryRepository.save(memory);
     }
 
@@ -212,6 +213,7 @@ public class MemoryService {
     public MemoryDTO restoreMemory(Long id, UserDetails userDetails) {
         MemoryEntity memory = getOwnedMemory(id, userDetails);
         memory.setDeleted(false);
+        memory.setTrashedAt(null); // [smsong] 복원 시 자동삭제 타이머 해제
         return MemoryDTO.entityToDto(memoryRepository.save(memory));
     }
 
@@ -223,12 +225,47 @@ public class MemoryService {
         memoryRepository.delete(memory);
     }
 
-    // 내가 휴지통으로 보낸 추억 목록
-    @Transactional(readOnly = true)
+    // 내가 휴지통으로 보낸 추억 목록 (조회 시 만료 항목 자동 삭제 + 남은 일수 계산)
+    // [B] edit by smsong - 휴지통 30일 자동 삭제 + 오브젝트별 '며칠 뒤 자동 삭제' 계산
+    @Transactional
     public List<MemoryDTO> getTrash(String uid, UserDetails userDetails) {
         UserEntity user = getAuthorizedUser(uid, userDetails);
-        return memoryRepository.findByOwnerUidAndDeletedTrue(user.getUid()).stream()
-                .map(MemoryDTO::entityToDto)
-                .collect(Collectors.toList());
+        java.time.LocalDateTime now = java.time.LocalDateTime.now();
+        List<MemoryEntity> trashed = memoryRepository.findByOwnerUidAndDeletedTrue(user.getUid());
+
+        List<MemoryDTO> result = new ArrayList<>();
+        for (MemoryEntity m : trashed) {
+            // 기존(휴지통 시각 미기록) 항목은 지금을 기준으로 타이머 시작
+            if (m.getTrashedAt() == null) {
+                m.setTrashedAt(now);
+                memoryRepository.save(m);
+            }
+            java.time.LocalDateTime autoDeleteAt = m.getTrashedAt().plusDays(TRASH_RETENTION_DAYS);
+            if (!autoDeleteAt.isAfter(now)) {
+                // 보관 기간(30일) 경과 → 영구 삭제 (연관 댓글 포함)
+                commentService.deleteAllByMemory(m.getId());
+                memoryRepository.delete(m);
+                continue;
+            }
+            long daysLeft = java.time.temporal.ChronoUnit.DAYS.between(now, autoDeleteAt);
+            if (daysLeft < 0) daysLeft = 0;
+            MemoryDTO dto = MemoryDTO.entityToDto(m);
+            dto.setDaysUntilAutoDelete((int) daysLeft);
+            result.add(dto);
+        }
+        return result;
     }
+
+    // 스케줄러용: 보관 기간(30일) 경과한 휴지통 추억 일괄 영구 삭제
+    @Transactional
+    public int purgeExpiredTrash() {
+        java.time.LocalDateTime cutoff = java.time.LocalDateTime.now().minusDays(TRASH_RETENTION_DAYS);
+        List<MemoryEntity> expired = memoryRepository.findByDeletedTrueAndTrashedAtBefore(cutoff);
+        for (MemoryEntity m : expired) {
+            commentService.deleteAllByMemory(m.getId());
+            memoryRepository.delete(m);
+        }
+        return expired.size();
+    }
+    // [E] edit by smsong
 }

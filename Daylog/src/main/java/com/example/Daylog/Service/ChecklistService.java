@@ -43,13 +43,25 @@ public class ChecklistService {
                 .orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다"));
     }
 
-    // [B] edit by smsong - 커플(송성민/강미르)은 소유자가 아니어도 모든 가볼곳을 수정·휴지통 이동 가능
-    private static final java.util.Set<String> PRIVILEGED_NICKNAMES = java.util.Set.of("송성민", "강미르");
+    // [B] edit by smsong - 커플(송성민/강미르)은 소유자가 아니어도 모든 가볼곳을 '수정' 가능 (이름(name) 기준)
+    private static final java.util.Set<String> PRIVILEGED_NAMES = java.util.Set.of("송성민", "강미르");
+    private static final int TRASH_RETENTION_DAYS = 30; // 휴지통 보관 후 자동 삭제 기준일
     private boolean isPrivilegedEditor(UserDetails userDetails) {
         if (userDetails == null) return false;
         return userRepository.findByUid(userDetails.getUsername())
-                .map(u -> u.getNickname() != null && PRIVILEGED_NICKNAMES.contains(u.getNickname().trim()))
+                .map(u -> u.getName() != null && PRIVILEGED_NAMES.contains(u.getName().trim()))
                 .orElse(false);
+    }
+    // 수정용: 소유자 또는 커플(송성민/강미르)
+    private ChecklistEntity getEditableChecklist(Long id, UserDetails userDetails) {
+        ChecklistEntity c = checklistRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("가볼곳을 찾을 수 없습니다"));
+        String ownerUid = (c.getOwner() != null) ? c.getOwner().getUid() : null;
+        boolean isOwner = (userDetails != null && ownerUid != null && ownerUid.equals(userDetails.getUsername()));
+        if (!isOwner && !isPrivilegedEditor(userDetails)) {
+            throw new RuntimeException("권한이 없습니다");
+        }
+        return c;
     }
     // [E] edit by smsong
 
@@ -57,10 +69,9 @@ public class ChecklistService {
     private ChecklistEntity getOwnedChecklist(Long id, UserDetails userDetails) {
         ChecklistEntity c = checklistRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("가볼곳을 찾을 수 없습니다"));
-        // [B] edit by smsong - 소유자 또는 커플(송성민/강미르)이면 수정/휴지통 이동/복원/삭제 가능
+        // [B] edit by smsong - 휴지통 이동/복원/삭제는 '작성자(소유자)'만 가능
         String ownerUid = (c.getOwner() != null) ? c.getOwner().getUid() : null;
-        boolean isOwner = (userDetails != null && ownerUid != null && ownerUid.equals(userDetails.getUsername()));
-        if (!isOwner && !isPrivilegedEditor(userDetails)) {
+        if (userDetails == null || ownerUid == null || !ownerUid.equals(userDetails.getUsername())) {
             throw new RuntimeException("권한이 없습니다");
         }
         // [E] edit by smsong
@@ -158,7 +169,7 @@ public class ChecklistService {
     // 본인 소유 체크리스트 수정 (제목/내용/타입/방문여부/방문일 + 이미지 정렬/추가/삭제)
     @Transactional
     public ChecklistDTO updateChecklist(Long id, ChecklistDTO dto, List<MultipartFile> mediaFiles, UserDetails userDetails) {
-        ChecklistEntity c = getOwnedChecklist(id, userDetails);
+        ChecklistEntity c = getEditableChecklist(id, userDetails); // [smsong] 수정은 소유자 또는 커플
 
         if (dto.getTitle() != null)   c.setTitle(dto.getTitle());
         if (dto.getContent() != null) c.setContent(dto.getContent());
@@ -198,6 +209,7 @@ public class ChecklistService {
     public void moveToTrash(Long id, UserDetails userDetails) {
         ChecklistEntity c = getOwnedChecklist(id, userDetails);
         c.setDeleted(true);
+        c.setTrashedAt(java.time.LocalDateTime.now()); // [smsong] 30일 자동삭제 기준 시각
         checklistRepository.save(c);
     }
 
@@ -206,6 +218,7 @@ public class ChecklistService {
     public ChecklistDTO restoreChecklist(Long id, UserDetails userDetails) {
         ChecklistEntity c = getOwnedChecklist(id, userDetails);
         c.setDeleted(false);
+        c.setTrashedAt(null); // [smsong] 복원 시 자동삭제 타이머 해제
         return ChecklistDTO.entityToDto(checklistRepository.save(c));
     }
 
@@ -216,12 +229,41 @@ public class ChecklistService {
         checklistRepository.delete(c);
     }
 
-    // 내가 휴지통으로 보낸 가볼곳 목록
-    @Transactional(readOnly = true)
+    // 내가 휴지통으로 보낸 가볼곳 목록 (조회 시 만료 항목 자동 삭제 + 남은 일수 계산)
+    // [B] edit by smsong - 휴지통 30일 자동 삭제 + 오브젝트별 '며칠 뒤 자동 삭제' 계산
+    @Transactional
     public List<ChecklistDTO> getTrash(String uid, UserDetails userDetails) {
         UserEntity user = getAuthorizedUser(uid, userDetails);
-        return checklistRepository.findByOwnerUidAndDeletedTrue(user.getUid()).stream()
-                .map(ChecklistDTO::entityToDto)
-                .collect(Collectors.toList());
+        java.time.LocalDateTime now = java.time.LocalDateTime.now();
+        List<ChecklistEntity> trashed = checklistRepository.findByOwnerUidAndDeletedTrue(user.getUid());
+
+        List<ChecklistDTO> result = new ArrayList<>();
+        for (ChecklistEntity c : trashed) {
+            if (c.getTrashedAt() == null) {
+                c.setTrashedAt(now);
+                checklistRepository.save(c);
+            }
+            java.time.LocalDateTime autoDeleteAt = c.getTrashedAt().plusDays(TRASH_RETENTION_DAYS);
+            if (!autoDeleteAt.isAfter(now)) {
+                checklistRepository.delete(c); // 30일 경과 → 영구 삭제
+                continue;
+            }
+            long daysLeft = java.time.temporal.ChronoUnit.DAYS.between(now, autoDeleteAt);
+            if (daysLeft < 0) daysLeft = 0;
+            ChecklistDTO dto = ChecklistDTO.entityToDto(c);
+            dto.setDaysUntilAutoDelete((int) daysLeft);
+            result.add(dto);
+        }
+        return result;
     }
+
+    // 스케줄러용: 보관 기간(30일) 경과한 휴지통 가볼곳 일괄 영구 삭제
+    @Transactional
+    public int purgeExpiredTrash() {
+        java.time.LocalDateTime cutoff = java.time.LocalDateTime.now().minusDays(TRASH_RETENTION_DAYS);
+        List<ChecklistEntity> expired = checklistRepository.findByDeletedTrueAndTrashedAtBefore(cutoff);
+        checklistRepository.deleteAll(expired);
+        return expired.size();
+    }
+    // [E] edit by smsong
 }

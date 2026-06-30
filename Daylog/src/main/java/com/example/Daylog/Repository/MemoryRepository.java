@@ -4,6 +4,7 @@ import com.example.Daylog.Entity.MemoryEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import java.time.LocalDateTime;
 import java.util.List;
 
 public interface MemoryRepository extends JpaRepository<MemoryEntity, Long> {
@@ -16,6 +17,10 @@ public interface MemoryRepository extends JpaRepository<MemoryEntity, Long> {
 
     // 내가 휴지통으로 보낸 추억 목록
     List<MemoryEntity> findByOwnerUidAndDeletedTrue(String uid);
+
+    // [B] edit by smsong - 휴지통 30일 자동 삭제: 이동(trashedAt)된 지 기준시각 이전인 추억
+    List<MemoryEntity> findByDeletedTrueAndTrashedAtBefore(LocalDateTime cutoff);
+    // [E] edit by smsong
 
     // 필요 시 제목이나 내용으로 추억 검색 (부동산 검색 패턴 오마주)
     @Query("SELECT m FROM memories m WHERE " +

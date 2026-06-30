@@ -37,7 +37,7 @@
         </div>
     </div>
     <div class="dday-counter">
-        <span class="heart-icon"></span> D +<span id="dday-count">0</span>
+        <!-- [B] edit by smsong - 디데이 하트 제거 --><span class="dday-prefix">D +</span><span id="dday-count">0</span><!-- [E] edit by smsong -->
     </div>
     <button class="logout-btn" id="btn-logout">로그아웃</button>
     <input type="file" id="memory-file" accept="image/*" multiple style="display: none;">
@@ -63,7 +63,7 @@
                 <div class="lm-reticle"></div>
                 <div class="lm-top">
                     <div class="lm-banner" id="lm-center-label">
-                        <span class="lm-pin"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;" aria-hidden="true"><path d="M21 10c0 6-9 12-9 12s-9-6-9-12a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg></span> 지도를 움직여 중앙에 위치를 맞춰주세요
+                        <span class="lm-pin"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;" aria-hidden="true"><path d="M21 10c0 6-9 12-9 12s-9-6-9-12a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg></span> 지도를 움직여 중앙에 위치를 맞춰주십시오
                     </div>
                 </div>
                 <div class="lm-bottom">
@@ -228,6 +228,12 @@
 <button type="button" id="btn-checklist-add" class="tab-fab" title="가볼곳 추가" aria-label="가볼곳 추가"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
 <!-- [E] edit by smsong -->
 
+<!-- [B] edit by smsong - 전역 로딩 오버레이 (CRUD API 처리 중 클릭 차단 · 중복 제출 방지) -->
+<div id="loading-overlay" class="loading-overlay" aria-hidden="true">
+    <div class="lo-box"><div class="lo-spinner"></div><div class="lo-text">처리 중입니다...</div></div>
+</div>
+<!-- [E] edit by smsong -->
+
 <!-- 추억 작성 모달 -->
 <div id="memory-modal" class="modal hidden">
     <div class="modal-content">
@@ -251,11 +257,11 @@
             </div>
             <div class="form-group">
                 <label>제목</label>
-                <input type="text" id="memory-title" placeholder="어떤 날이었나요?" required>
+                <input type="text" id="memory-title" placeholder="어떤 날이었습니까?" required>
             </div>
             <div class="form-group">
                 <label>내용</label>
-                <textarea id="memory-content" placeholder="이야기를 작성하세요 (선택)" rows="4"></textarea>
+                <textarea id="memory-content" placeholder="이야기를 작성하십시오 (선택)" rows="4"></textarea>
             </div>
             <button type="submit" class="submit-btn">기록하기</button>
         </form>
@@ -291,9 +297,9 @@
             </div>
             <div class="form-group">
                 <label>내용</label>
-                <textarea id="edit-memory-content" rows="5" placeholder="이야기를 작성하세요 (선택)"></textarea>
+                <textarea id="edit-memory-content" rows="5" placeholder="이야기를 작성하십시오 (선택)"></textarea>
             </div>
-            <p class="detail-edit-note">※ 위치는 수정할 수 없어요.</p>
+            <p class="detail-edit-note">※ 위치는 수정할 수 없습니다.</p>
             <div class="detail-edit-actions">
                 <button type="button" id="detail-edit-cancel" class="cancel-edit-btn">취소</button>
                 <button type="submit" class="submit-btn">저장하기</button>
@@ -328,11 +334,11 @@
             </div>
             <div class="form-group">
                 <label>내용</label>
-                <textarea id="cl-content" placeholder="메모를 남겨보세요" rows="3"></textarea>
+                <textarea id="cl-content" placeholder="메모를 남겨보십시오" rows="3"></textarea>
             </div>
             <div class="form-group cl-visited-group">
                 <label class="cl-check-label">
-                    <input type="checkbox" id="cl-visited"> 다녀왔어요
+                    <input type="checkbox" id="cl-visited"> 다녀왔습니다
                 </label>
                 <input type="date" id="cl-visited-date" disabled>
             </div>
@@ -365,7 +371,7 @@
                 <label>사진 (최대 10장)</label>
                 <div class="media-grid" id="cl-edit-media-grid"></div>
                 <input type="file" id="cl-edit-image-file" accept="image/*" multiple class="cl-file-input" style="display:none">
-                <p class="cl-img-hint">사진을 꾹 눌러 순서를 바꾸고, <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> 로 삭제할 수 있어요.</p>
+                <p class="cl-img-hint">사진을 꾹 눌러 순서를 바꾸고, <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> 로 삭제할 수 있습니다.</p>
             </div>
             <div class="form-group">
                 <label>타입</label>
@@ -386,11 +392,11 @@
             </div>
             <div class="form-group cl-visited-group">
                 <label class="cl-check-label">
-                    <input type="checkbox" id="cl-edit-visited"> 다녀왔어요
+                    <input type="checkbox" id="cl-edit-visited"> 다녀왔습니다
                 </label>
                 <input type="date" id="cl-edit-visited-date" disabled>
             </div>
-            <p class="detail-edit-note">※ 위치는 수정할 수 없어요.</p>
+            <p class="detail-edit-note">※ 위치는 수정할 수 없습니다.</p>
             <div class="detail-edit-actions">
                 <button type="button" id="cl-edit-cancel" class="cancel-edit-btn">취소</button>
                 <button type="submit" class="submit-btn">저장하기</button>
@@ -462,7 +468,7 @@
             <button type="button" id="pe-rotate" class="pe-btn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> 90° 회전</button>
             <button type="button" id="pe-reset" class="pe-btn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;" aria-hidden="true"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg> 자르기 초기화</button>
         </div>
-        <p class="pe-hint">모서리를 끌어 자르고, 회전 버튼으로 방향을 바꿔요</p>
+        <p class="pe-hint">모서리를 끌어 자르고, 회전 버튼으로 방향을 바꿉니다</p>
         <button type="button" class="submit-btn" id="pe-apply">이 사진으로 적용</button>
     </div>
 </div>
@@ -491,7 +497,7 @@
 <div id="nickname-modal" class="modal hidden">
     <div class="modal-content nickname-content">
         <div class="nickname-emoji"><svg class="brand-glyph" width="56" height="56" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><rect x="15" y="9" width="35" height="46" rx="6" fill="#fffdf9" stroke="#b08968" stroke-width="2.6"/><line x1="24" y1="9" x2="24" y2="55" stroke="#b08968" stroke-width="2.2"/><circle cx="19.5" cy="18" r="1.5" fill="#b08968"/><circle cx="19.5" cy="27" r="1.5" fill="#b08968"/><circle cx="19.5" cy="36" r="1.5" fill="#b08968"/><circle cx="19.5" cy="45" r="1.5" fill="#b08968"/><g stroke="#e6ccb2" stroke-width="2.3" stroke-linecap="round"><line x1="29" y1="19" x2="45" y2="19"/><line x1="29" y1="25" x2="45" y2="25"/></g><path d="M37.5 50c-5-3.8-10-7-10-12a5.6 5.6 0 0 1 10-3.6A5.6 5.6 0 0 1 47.5 38c0 5-5 8.2-10 12z" fill="#c1462f"/><path d="M43 9h6v13l-3-2.4-3 2.4z" fill="#9c6644"/></svg></div>
-        <h3 class="nickname-title">닉네임을 설정해주세요</h3>
+        <h3 class="nickname-title">닉네임을 설정해주십시오</h3>
         <p class="nickname-desc">프로필에서 언제든 변경 가능</p>
         <form id="nickname-form">
             <div class="form-group">

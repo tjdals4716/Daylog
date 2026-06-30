@@ -61,6 +61,10 @@ public class MemoryEntity {
     // [B] edit by smsong - 마지막 수정 시각 / 마지막 수정자(uid) 추적
     private LocalDateTime updatedAt;
     private String lastEditorUid;
+    // 실제 생성 시각(레코드가 DB에 처음 저장된 시점) — 화면 비노출, DB 보관용. createdAt(사진 촬영일 등으로 덮일 수 있음)과 별개로 항상 실제 시각 보관
+    private LocalDateTime realCreatedAt;
+    // 휴지통으로 이동한 시각 (30일 자동 삭제 기준)
+    private LocalDateTime trashedAt;
     // [E] edit by smsong
 
     @PrePersist
@@ -73,6 +77,10 @@ public class MemoryEntity {
         // [B] edit by smsong - 최초 저장 시 updatedAt 을 createdAt 과 동일하게 초기화
         if (this.updatedAt == null) {
             this.updatedAt = this.createdAt;
+        }
+        // 실제 생성 시각은 항상 현재 시각으로 고정(덮어쓰기 방지)
+        if (this.realCreatedAt == null) {
+            this.realCreatedAt = LocalDateTime.now();
         }
         // [E] edit by smsong
     }
