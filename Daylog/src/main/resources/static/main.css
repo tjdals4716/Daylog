@@ -1822,4 +1822,61 @@ body.map-immersive .container { height: 100vh; height: 100dvh; }
 }
 @keyframes loSpin { to { transform: rotate(360deg); } }
 .lo-text { font-size: 0.86rem; color: var(--gray-600, #6b6157); font-weight: 600; }
+/* [E] edit by smsong */
+
+/* [B] edit by smsong - 권한 설정 버튼 + 관리자 권한 메뉴 + 차단화면 요청 버튼 */
+.perm-menu-btn {
+    display: block; width: 100%; margin-top: 10px;
+    background: var(--primary, #b08968); color: #fff;
+    border: 1px solid var(--primary, #b08968); border-radius: 14px;
+    padding: 14px; font-size: 0.95rem; font-weight: 700;
+    font-family: var(--font-main); cursor: pointer; transition: all 0.2s ease;
+}
+.perm-menu-btn:hover { filter: brightness(1.05); }
+.perm-menu-btn:active { transform: scale(0.98); }
+
+.perm-content { max-width: 560px; }
+.perm-desc { font-size: 0.84rem; color: var(--gray-500, #8a8178); margin: 0 0 14px; line-height: 1.5; }
+.perm-body { display: flex; flex-direction: column; gap: 10px; max-height: 64vh; overflow-y: auto; }
+.perm-loading, .perm-empty { text-align: center; color: var(--gray-500, #8a8178); padding: 28px 0; font-size: 0.9rem; }
+.perm-row {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+    padding: 12px; border: 1px solid var(--gray-100, #eee); border-radius: 14px; background: var(--white, #fff);
+}
+.perm-user { display: flex; align-items: center; gap: 10px; flex: 1 1 160px; min-width: 0; }
+.perm-ava { width: 38px; height: 38px; border-radius: 50%; object-fit: cover; flex: 0 0 auto; }
+.perm-ava-empty { display: flex; align-items: center; justify-content: center; background: var(--gray-100, #f1f1f1); color: var(--gray-400, #aaa); }
+.perm-user-meta { min-width: 0; }
+.perm-name { font-size: 0.92rem; font-weight: 700; color: var(--gray-800, #333); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.perm-badge { display: inline-block; margin-top: 3px; font-size: 0.7rem; font-weight: 700; padding: 2px 8px; border-radius: 20px; }
+.perm-admin { background: #2c3e50; color: #fff; }
+.perm-ok { background: #e6f4ea; color: #1e7d3c; }
+.perm-pending { background: #fff3d6; color: #9a6b00; }
+.perm-rejected { background: #fdecec; color: #c0392b; }
+.perm-none { background: var(--gray-100, #f1f1f1); color: var(--gray-500, #888); }
+.perm-access { flex: 0 0 auto; }
+.perm-btn { border: none; border-radius: 10px; padding: 8px 12px; font-size: 0.78rem; font-weight: 700; cursor: pointer; font-family: var(--font-main); }
+.perm-approve { background: #1e7d3c; color: #fff; }
+.perm-revoke { background: #fdecec; color: #c0392b; }
+.perm-flags { display: flex; gap: 6px; flex: 1 1 100%; }
+.perm-chip {
+    flex: 1; border: 1px solid var(--gray-200, #e2ddd6); background: var(--white, #fff);
+    color: var(--gray-500, #8a8178); border-radius: 10px; padding: 8px 6px;
+    font-size: 0.78rem; font-weight: 700; cursor: pointer; font-family: var(--font-main); transition: all 0.15s ease;
+}
+.perm-chip.on { background: var(--primary, #b08968); color: #fff; border-color: var(--primary, #b08968); }
+.perm-chip:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.abx-request-btn {
+    margin-top: 16px; width: 100%; border: none; border-radius: 12px;
+    background: var(--primary, #b08968); color: #fff; padding: 13px;
+    font-size: 0.95rem; font-weight: 700; cursor: pointer; font-family: var(--font-main);
+}
+.abx-request-btn:disabled { opacity: 0.6; cursor: default; }
+.abx-login-btn {
+    margin-top: 8px; width: 100%; border: 1px solid var(--gray-200, #e2ddd6);
+    background: var(--white, #fff); color: var(--gray-600, #6b6157); border-radius: 12px; padding: 12px;
+    font-size: 0.9rem; font-weight: 600; cursor: pointer; font-family: var(--font-main);
+}
+.abx-card .abx-sub { margin-top: 12px; }
 /* [E] edit by smsong */

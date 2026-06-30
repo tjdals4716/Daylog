@@ -29,6 +29,7 @@ public class MemoryService {
     private final UserRepository userRepository;
     private final CommentService commentService;
     private final Storage storage;
+    private final PermissionService permissionService; // [smsong] 권한 관리 연동
 
     @Value("${google.cloud.credentials.header}")
     private String googleCloudHeader;
@@ -43,14 +44,11 @@ public class MemoryService {
                 .orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다"));
     }
 
-    // [B] edit by smsong - 커플(송성민/강미르)은 소유자가 아니어도 모든 추억을 '수정' 가능 (이름(name) 기준)
-    private static final java.util.Set<String> PRIVILEGED_NAMES = java.util.Set.of("송성민", "강미르");
+    // [B] edit by smsong - 권한은 PermissionService(DB·관리자 메뉴 관리) 기준으로 판정
     private static final int TRASH_RETENTION_DAYS = 30; // 휴지통 보관 후 자동 삭제 기준일
-    private boolean isPrivilegedEditor(UserDetails userDetails) {
-        if (userDetails == null) return false;
-        return userRepository.findByUid(userDetails.getUsername())
-                .map(u -> u.getName() != null && PRIVILEGED_NAMES.contains(u.getName().trim()))
-                .orElse(false);
+    private boolean isOwner(MemoryEntity m, UserDetails ud) {
+        String ownerUid = (m.getOwner() != null) ? m.getOwner().getUid() : null;
+        return ud != null && ownerUid != null && ownerUid.equals(ud.getUsername());
     }
     // [E] edit by smsong
 
@@ -147,10 +145,8 @@ public class MemoryService {
         MemoryEntity memory = memoryRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("추억을 찾을 수 없습니다"));
 
-        // [B] edit by smsong - 소유자 또는 커플(송성민/강미르)이면 수정 가능
-        String ownerUid = (memory.getOwner() != null) ? memory.getOwner().getUid() : null;
-        boolean isOwner = (userDetails != null && ownerUid != null && ownerUid.equals(userDetails.getUsername()));
-        if (!isOwner && !isPrivilegedEditor(userDetails)) {
+        // [B] edit by smsong - 소유자 또는 '수정 권한' 보유자면 수정 가능
+        if (!isOwner(memory, userDetails) && !permissionService.canEdit(userDetails)) {
             throw new RuntimeException("권한이 없습니다");
         }
         // [E] edit by smsong
@@ -186,41 +182,44 @@ public class MemoryService {
         return MemoryDTO.entityToDto(memoryRepository.save(memory));
     }
 
-    // 소유자 검증 후 추억 반환
-    private MemoryEntity getOwnedMemory(Long id, UserDetails userDetails) {
-        MemoryEntity memory = memoryRepository.findById(id)
+    // [B] edit by smsong - 추억 단순 조회 (권한 체크는 호출부에서)
+    private MemoryEntity findMemory(Long id) {
+        return memoryRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("추억을 찾을 수 없습니다"));
-        // [B] edit by smsong - 휴지통 이동/복원/삭제는 '작성자(소유자)'만 가능
-        String ownerUid = (memory.getOwner() != null) ? memory.getOwner().getUid() : null;
-        if (userDetails == null || ownerUid == null || !ownerUid.equals(userDetails.getUsername())) {
-            throw new RuntimeException("권한이 없습니다");
-        }
-        // [E] edit by smsong
-        return memory;
     }
+    // [E] edit by smsong
 
-    // 휴지통으로 이동 (소프트 삭제)
+    // 휴지통으로 이동 (소프트 삭제) — 소유자 또는 '휴지통 이동 권한'
     @Transactional
     public void moveToTrash(Long id, UserDetails userDetails) {
-        MemoryEntity memory = getOwnedMemory(id, userDetails);
+        MemoryEntity memory = findMemory(id);
+        if (!isOwner(memory, userDetails) && !permissionService.canTrash(userDetails)) {
+            throw new RuntimeException("권한이 없습니다");
+        }
         memory.setDeleted(true);
         memory.setTrashedAt(java.time.LocalDateTime.now()); // [smsong] 30일 자동삭제 기준 시각
         memoryRepository.save(memory);
     }
 
-    // 휴지통에서 복원
+    // 휴지통에서 복원 — 소유자 또는 '휴지통 이동 권한'
     @Transactional
     public MemoryDTO restoreMemory(Long id, UserDetails userDetails) {
-        MemoryEntity memory = getOwnedMemory(id, userDetails);
+        MemoryEntity memory = findMemory(id);
+        if (!isOwner(memory, userDetails) && !permissionService.canTrash(userDetails)) {
+            throw new RuntimeException("권한이 없습니다");
+        }
         memory.setDeleted(false);
         memory.setTrashedAt(null); // [smsong] 복원 시 자동삭제 타이머 해제
         return MemoryDTO.entityToDto(memoryRepository.save(memory));
     }
 
-    // 영구 삭제 (연관 댓글 일괄 제거 포함)
+    // 영구 삭제 (연관 댓글 일괄 제거 포함) — 소유자 또는 '삭제 권한'
     @Transactional
     public void permanentDelete(Long id, UserDetails userDetails) {
-        MemoryEntity memory = getOwnedMemory(id, userDetails);
+        MemoryEntity memory = findMemory(id);
+        if (!isOwner(memory, userDetails) && !permissionService.canDelete(userDetails)) {
+            throw new RuntimeException("권한이 없습니다");
+        }
         commentService.deleteAllByMemory(id);
         memoryRepository.delete(memory);
     }

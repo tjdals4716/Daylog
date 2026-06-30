@@ -28,6 +28,7 @@ public class ChecklistService {
     private final ChecklistRepository checklistRepository;
     private final UserRepository userRepository;
     private final Storage storage;
+    private final PermissionService permissionService; // [smsong] 권한 관리 연동
 
     @Value("${google.cloud.credentials.header}")
     private String googleCloudHeader;
@@ -43,40 +44,25 @@ public class ChecklistService {
                 .orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다"));
     }
 
-    // [B] edit by smsong - 커플(송성민/강미르)은 소유자가 아니어도 모든 가볼곳을 '수정' 가능 (이름(name) 기준)
-    private static final java.util.Set<String> PRIVILEGED_NAMES = java.util.Set.of("송성민", "강미르");
+    // [B] edit by smsong - 권한은 PermissionService(DB·관리자 메뉴 관리) 기준으로 판정
     private static final int TRASH_RETENTION_DAYS = 30; // 휴지통 보관 후 자동 삭제 기준일
-    private boolean isPrivilegedEditor(UserDetails userDetails) {
-        if (userDetails == null) return false;
-        return userRepository.findByUid(userDetails.getUsername())
-                .map(u -> u.getName() != null && PRIVILEGED_NAMES.contains(u.getName().trim()))
-                .orElse(false);
-    }
-    // 수정용: 소유자 또는 커플(송성민/강미르)
-    private ChecklistEntity getEditableChecklist(Long id, UserDetails userDetails) {
-        ChecklistEntity c = checklistRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("가볼곳을 찾을 수 없습니다"));
+    private boolean isOwner(ChecklistEntity c, UserDetails ud) {
         String ownerUid = (c.getOwner() != null) ? c.getOwner().getUid() : null;
-        boolean isOwner = (userDetails != null && ownerUid != null && ownerUid.equals(userDetails.getUsername()));
-        if (!isOwner && !isPrivilegedEditor(userDetails)) {
+        return ud != null && ownerUid != null && ownerUid.equals(ud.getUsername());
+    }
+    private ChecklistEntity findChecklist(Long id) {
+        return checklistRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("가볼곳을 찾을 수 없습니다"));
+    }
+    // 수정용: 소유자 또는 '수정 권한'
+    private ChecklistEntity getEditableChecklist(Long id, UserDetails userDetails) {
+        ChecklistEntity c = findChecklist(id);
+        if (!isOwner(c, userDetails) && !permissionService.canEdit(userDetails)) {
             throw new RuntimeException("권한이 없습니다");
         }
         return c;
     }
     // [E] edit by smsong
-
-    // 소유자 검증 후 체크리스트 반환
-    private ChecklistEntity getOwnedChecklist(Long id, UserDetails userDetails) {
-        ChecklistEntity c = checklistRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("가볼곳을 찾을 수 없습니다"));
-        // [B] edit by smsong - 휴지통 이동/복원/삭제는 '작성자(소유자)'만 가능
-        String ownerUid = (c.getOwner() != null) ? c.getOwner().getUid() : null;
-        if (userDetails == null || ownerUid == null || !ownerUid.equals(userDetails.getUsername())) {
-            throw new RuntimeException("권한이 없습니다");
-        }
-        // [E] edit by smsong
-        return c;
-    }
 
     // GCS 업로드 (선택 — 이미지 없으면 null)
     private String uploadMedia(MultipartFile mediaFile) {
@@ -207,7 +193,10 @@ public class ChecklistService {
     // 휴지통으로 이동 (소프트 삭제 · 소유자만)
     @Transactional
     public void moveToTrash(Long id, UserDetails userDetails) {
-        ChecklistEntity c = getOwnedChecklist(id, userDetails);
+        ChecklistEntity c = findChecklist(id);
+        if (!isOwner(c, userDetails) && !permissionService.canTrash(userDetails)) {
+            throw new RuntimeException("권한이 없습니다");
+        }
         c.setDeleted(true);
         c.setTrashedAt(java.time.LocalDateTime.now()); // [smsong] 30일 자동삭제 기준 시각
         checklistRepository.save(c);
@@ -216,7 +205,10 @@ public class ChecklistService {
     // 휴지통에서 복원 (소유자만)
     @Transactional
     public ChecklistDTO restoreChecklist(Long id, UserDetails userDetails) {
-        ChecklistEntity c = getOwnedChecklist(id, userDetails);
+        ChecklistEntity c = findChecklist(id);
+        if (!isOwner(c, userDetails) && !permissionService.canTrash(userDetails)) {
+            throw new RuntimeException("권한이 없습니다");
+        }
         c.setDeleted(false);
         c.setTrashedAt(null); // [smsong] 복원 시 자동삭제 타이머 해제
         return ChecklistDTO.entityToDto(checklistRepository.save(c));
@@ -225,7 +217,10 @@ public class ChecklistService {
     // 영구 삭제 (소유자만)
     @Transactional
     public void permanentDelete(Long id, UserDetails userDetails) {
-        ChecklistEntity c = getOwnedChecklist(id, userDetails);
+        ChecklistEntity c = findChecklist(id);
+        if (!isOwner(c, userDetails) && !permissionService.canDelete(userDetails)) {
+            throw new RuntimeException("권한이 없습니다");
+        }
         checklistRepository.delete(c);
     }
 
