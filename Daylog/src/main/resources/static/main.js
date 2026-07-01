@@ -101,8 +101,14 @@ async function handleResponse(res) {
     if (res.status === 413) {
         throw new Error('이미지 용량이 너무 큽니다. 사진 수를 줄이거나 더 작은 이미지를 사용해주십시오.');
     }
-    // 1. 401(Unauthorized), 403(Forbidden) 또는 500(Internal Server Error)이 발생하면 튕겨냄
-    if (res.status === 401 || res.status === 403 || res.status === 500) {
+    // [B] edit by smsong - 403(서비스 접근 권한 없음)은 로그인 튕김 대신 '권한 없음' 화면(요청 버튼) 표시
+    if (res.status === 403) {
+        try { if (typeof blockUnauthorizedUser === 'function') blockUnauthorizedUser(); } catch (e) {}
+        throw new Error('서비스 접근 권한이 없습니다');
+    }
+    // [E] edit by smsong
+    // 1. 401(Unauthorized) 또는 500(Internal Server Error)이 발생하면 튕겨냄
+    if (res.status === 401 || res.status === 500) {
         redirectToLogin('토큰이 만료되었거나 존재하지 않습니다. 다시 로그인해주십시오.');
         throw new Error('인증 만료 또는 서버 에러 발생');
     }

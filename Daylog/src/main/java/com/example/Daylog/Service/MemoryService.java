@@ -11,6 +11,8 @@ import com.google.cloud.storage.Storage;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -49,6 +51,12 @@ public class MemoryService {
     private boolean isOwner(MemoryEntity m, UserDetails ud) {
         String ownerUid = (m.getOwner() != null) ? m.getOwner().getUid() : null;
         return ud != null && ownerUid != null && ownerUid.equals(ud.getUsername());
+    }
+    // [smsong] 서비스 접근 권한 검사 (관리자/부트스트랩/관리자승인 외 전부 403 차단)
+    private void requireAccess(UserDetails ud) {
+        if (!permissionService.hasAccess(ud)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "서비스 접근 권한이 없습니다");
+        }
     }
     // [E] edit by smsong
 
@@ -138,6 +146,7 @@ public class MemoryService {
 
     @Transactional(readOnly = true)
     public List<MemoryDTO> getAllMemories(String uid, UserDetails userDetails) {
+        requireAccess(userDetails); // [smsong] 접근 권한 없는 사용자 차단
         return memoryRepository.findByDeletedFalse().stream()
                 .map(MemoryDTO::entityToDto)
                 .collect(Collectors.toList());
@@ -232,6 +241,7 @@ public class MemoryService {
     // [B] edit by smsong - 휴지통 30일 자동 삭제 + 오브젝트별 '며칠 뒤 자동 삭제' 계산
     @Transactional
     public List<MemoryDTO> getTrash(String uid, UserDetails userDetails) {
+        requireAccess(userDetails); // [smsong] 접근 권한 검사
         UserEntity user = getAuthorizedUser(uid, userDetails);
         java.time.LocalDateTime now = java.time.LocalDateTime.now();
         List<MemoryEntity> trashed = memoryRepository.findByOwnerUidAndDeletedTrue(user.getUid());
