@@ -166,6 +166,14 @@ body[data-active-tab="tab-profile"] #btn-logout { margin-left: auto; }
 .map-wrapper { position: relative; width: 100%; height: 100%; background: #e9e5dc; overflow: hidden; }
 #naver-map { width: 100%; height: 100%; }
 
+/* [B] edit by smsong - 지도 탭에서는 지도를 뷰포트에 '고정' → 헤더/하단바가 그 위로만 슬라이드.
+   지도 자체는 크기·위치가 절대 변하지 않아 몰입모드 토글 시 지도가 움직이거나 버벅이지 않음. */
+body[data-active-tab="tab-map"] .map-wrapper {
+    position: fixed; inset: 0;
+    width: 100%; height: 100vh; height: 100dvh;
+}
+/* [E] edit by smsong */
+
 /* 지도 키 미설정 시 안내 (선택) */
 .map-fallback {
     position: absolute; inset: 0; display: flex; flex-direction: column;
@@ -311,9 +319,11 @@ body[data-active-tab="tab-profile"] #btn-logout { margin-left: auto; }
 
 /* 우측 세로 원형 버튼 스택 (추억↔체크리스트 전환 / 추가) */
 .map-fab-stack {
-    position: absolute; right: 16px; bottom: 22px; z-index: 20;
+    position: absolute; right: 16px; bottom: calc(22px + var(--bottom-nav-height)); z-index: 20;
     display: flex; flex-direction: column; gap: 12px;
+    transition: bottom 0.34s cubic-bezier(.4,0,.2,1); /* [smsong] 하단바 슬라이드에 맞춰 이동 */
 }
+body.map-immersive .map-fab-stack { bottom: 22px; } /* [smsong] 하단바 사라지면 아래로 내려옴 */
 .map-fab-stack .map-fab {
     width: 46px; height: 46px; min-width: 0; padding: 0;
     border-radius: 50%; font-size: 1.25rem; line-height: 1;

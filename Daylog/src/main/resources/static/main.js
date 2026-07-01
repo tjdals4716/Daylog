@@ -855,9 +855,7 @@ document.addEventListener('DOMContentLoaded', () => {
         naver.maps.Event.addListener(map, 'click', () => {
             if (isWaitingForMapClick) return; // 위치 선택 중에는 토글 안 함
             document.body.classList.toggle('map-immersive');
-            // [B] edit by smsong - 슬라이드 애니메이션(약 0.34s) 동안 지도를 자연스럽게 채우도록 리사이즈 분배
-            [180, 360].forEach(t => setTimeout(() => { if (map) naver.maps.Event.trigger(map, 'resize'); }, t));
-            // [E] edit by smsong
+            // [smsong] 지도는 뷰포트에 고정(fixed)되어 크기가 변하지 않으므로 resize() 불필요 → 버벅임/이동 제거
         });
     }
 
