@@ -337,7 +337,7 @@ function _permFetch(path, opts) {
 function requestAccessFromBlock() {
     var btn = document.getElementById('abx-request-btn');
     var sub = document.querySelector('#auth-block-overlay .abx-sub');
-    if (!(window.Daylog && Daylog.api)) {
+    if (!(Daylog && Daylog.api)) {
         if (sub) sub.textContent = '요청을 보낼 수 없습니다(설정 미완료). 새로고침 후 다시 시도해 주십시오.';
         return;
     }
