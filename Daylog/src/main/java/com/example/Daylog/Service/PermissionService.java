@@ -13,13 +13,11 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 import java.util.stream.Collectors;
 
-// [B] edit by smsong - 사용자 권한 관리 서비스 (UserEntity 외래키 연결 · 생성/수정/휴지통/삭제 권한)
-//  관리자: name '송성민' (무조건 모든 권한 + 접근)
-//  부트스트랩(상시 허용 + 모든 권한): 송성민 / 강미르 — 그 외에는 관리자가 승인/부여해야 함
-//  접근 판정은 저장된 accessAllowed 가 아니라 'adminApproved(관리자 명시 승인)' 기준으로 자가치유
+// [B] edit by smsong - 사용자 권한 관리 서비스 (uid 기반)
+//  관리자 = uid '3635939452' (무조건 모든 권한 + 접근). 이 uid만 상시 접근 허용(부트스트랩).
+//  그 외 사용자는 관리자가 승인/부여해야 접근·기능 가능. (이름 하드코딩 전부 제거)
 @Service
 @RequiredArgsConstructor
 public class PermissionService {
@@ -27,55 +25,49 @@ public class PermissionService {
     private final PermissionRepository permissionRepository;
     private final UserRepository userRepository;
 
-    public static final String ADMIN_NAME = "송성민";
-    private static final Set<String> BOOTSTRAP = Set.of("송성민", "강미르");
+    public static final String ADMIN_UID = "3635939452";
 
-    // ===== 이름/판별 =====
-    private String nameOf(UserDetails ud) {
-        if (ud == null) return null;
-        return userRepository.findByUid(ud.getUsername()).map(UserEntity::getName).orElse(null);
-    }
-    private boolean isAdminName(String name) { return name != null && ADMIN_NAME.equals(name.trim()); }
-    private boolean isBootstrap(String name) { return name != null && BOOTSTRAP.contains(name.trim()); }
-    private boolean privileged(String name) { return isAdminName(name) || isBootstrap(name); }
+    // ===== 판별 (uid 기준) =====
+    private boolean isAdminUid(String uid) { return uid != null && ADMIN_UID.equals(uid.trim()); }
+    private boolean privileged(String uid) { return isAdminUid(uid); } // 상시 허용 = 관리자 uid만
 
-    public boolean isAdmin(UserDetails ud) { return isAdminName(nameOf(ud)); }
+    public boolean isAdmin(UserDetails ud) { return ud != null && isAdminUid(ud.getUsername()); }
 
     private Optional<PermissionEntity> rowOf(UserDetails ud) {
         if (ud == null) return Optional.empty();
         return permissionRepository.findByUid(ud.getUsername());
     }
 
-    // ===== 실효 권한 판정 (Memory/Checklist 서비스에서 사용) =====
+    // ===== 실효 권한 (Memory/Checklist 서비스에서 사용) =====
     public boolean hasAccess(UserDetails ud) {
-        String n = nameOf(ud);
-        if (privileged(n)) return true;
+        if (ud == null) return false;
+        if (privileged(ud.getUsername())) return true;
         return rowOf(ud).map(PermissionEntity::isAdminApproved).orElse(false);
     }
     public boolean canCreate(UserDetails ud) {
-        String n = nameOf(ud);
-        if (privileged(n)) return true;
+        if (ud == null) return false;
+        if (privileged(ud.getUsername())) return true;
         return rowOf(ud).map(PermissionEntity::isCanCreate).orElse(false);
     }
     public boolean canEdit(UserDetails ud) {
-        String n = nameOf(ud);
-        if (privileged(n)) return true;
+        if (ud == null) return false;
+        if (privileged(ud.getUsername())) return true;
         return rowOf(ud).map(PermissionEntity::isCanEdit).orElse(false);
     }
     public boolean canTrash(UserDetails ud) {
-        String n = nameOf(ud);
-        if (privileged(n)) return true;
+        if (ud == null) return false;
+        if (privileged(ud.getUsername())) return true;
         return rowOf(ud).map(PermissionEntity::isCanTrash).orElse(false);
     }
     public boolean canDelete(UserDetails ud) {
-        String n = nameOf(ud);
-        if (privileged(n)) return true;
+        if (ud == null) return false;
+        if (privileged(ud.getUsername())) return true;
         return rowOf(ud).map(PermissionEntity::isCanDelete).orElse(false);
     }
 
     private void syncSnapshot(PermissionEntity e, UserEntity user) {
         if (user == null) return;
-        e.setUser(user);                 // 외래키 연결
+        e.setUser(user);
         e.setName(user.getName());
         e.setNickname(user.getNickname());
         e.setEmail(user.getEmail());
@@ -83,7 +75,7 @@ public class PermissionService {
         e.setProfileURL(user.getProfileURL());
     }
 
-    // ===== 등록(upsert): 로그인 사용자를 권한 목록에 올리고 본인(실효)권한 반환 + 접근 자가치유 =====
+    // ===== 등록(upsert): 로그인 시 권한 목록 등록 + 본인 실효권한 반환 + 접근 자가치유 =====
     @Transactional
     public PermissionDTO registerAndGetMine(UserDetails ud) {
         if (ud == null) throw new RuntimeException("권한이 없습니다");
@@ -93,15 +85,12 @@ public class PermissionService {
                 .orElseGet(() -> PermissionEntity.builder().uid(uid).requestStatus("NONE").build());
         syncSnapshot(e, user);
 
-        String name = (user != null) ? user.getName() : null;
-        boolean admin = isAdminName(name);
-        boolean priv = privileged(name);
-
-        // 접근 실효값 = 관리자 || 부트스트랩 || 관리자 명시 승인
+        boolean admin = isAdminUid(uid);
+        boolean priv = privileged(uid);
         boolean access = priv || e.isAdminApproved();
-        e.setAccessAllowed(access);                     // 저장값을 실효값으로 자가치유
+        e.setAccessAllowed(access);
         if (access && !"APPROVED".equals(e.getRequestStatus())) e.setRequestStatus("APPROVED");
-        if (!access && "APPROVED".equals(e.getRequestStatus())) e.setRequestStatus("NONE"); // 예전 부트스트랩 잔재 정리
+        if (!access && "APPROVED".equals(e.getRequestStatus())) e.setRequestStatus("NONE");
 
         e = permissionRepository.save(e);
         return PermissionDTO.effective(e, admin, priv);
@@ -110,11 +99,11 @@ public class PermissionService {
     @Transactional(readOnly = true)
     public PermissionDTO getMine(UserDetails ud) {
         if (ud == null) throw new RuntimeException("권한이 없습니다");
-        String name = nameOf(ud);
-        boolean admin = isAdminName(name);
-        boolean priv = privileged(name);
-        PermissionEntity e = permissionRepository.findByUid(ud.getUsername())
-                .orElseGet(() -> PermissionEntity.builder().uid(ud.getUsername()).requestStatus("NONE").build());
+        String uid = ud.getUsername();
+        boolean admin = isAdminUid(uid);
+        boolean priv = privileged(uid);
+        PermissionEntity e = permissionRepository.findByUid(uid)
+                .orElseGet(() -> PermissionEntity.builder().uid(uid).requestStatus("NONE").build());
         return PermissionDTO.effective(e, admin, priv);
     }
 
@@ -127,43 +116,46 @@ public class PermissionService {
         PermissionEntity e = permissionRepository.findByUid(uid)
                 .orElseGet(() -> PermissionEntity.builder().uid(uid).build());
         syncSnapshot(e, user);
-        String name = (user != null) ? user.getName() : null;
-        boolean priv = privileged(name);
+        boolean priv = privileged(uid);
         if (!priv && !e.isAdminApproved()) {
             e.setRequestStatus("PENDING");
             e.setRequestedAt(LocalDateTime.now());
         }
         e = permissionRepository.save(e);
-        return PermissionDTO.effective(e, isAdminName(name), priv);
+        return PermissionDTO.effective(e, isAdminUid(uid), priv);
     }
 
-    // ===== 관리자: 전체 사용자 목록 (원본 플래그) =====
+    // ===== 관리자: 전체 사용자 목록 =====
     @Transactional(readOnly = true)
     public List<PermissionDTO> listAll(UserDetails ud) {
         requireAdmin(ud);
         return permissionRepository.findAllByOrderByAccessAllowedDescUpdatedAtDesc().stream()
-                .map(e -> PermissionDTO.raw(e, isAdminName(e.getName()), isBootstrap(e.getName())))
+                .map(e -> {
+                    boolean adm = isAdminUid(e.getUid());
+                    return PermissionDTO.raw(e, adm, adm);
+                })
                 .collect(Collectors.toList());
     }
 
-    // ===== 관리자: 특정 사용자 권한 변경 (생성/수정/휴지통/삭제) =====
+    // ===== 관리자: 권한 변경 (생성/수정/휴지통/삭제 + 접근) =====
     @Transactional
     public PermissionDTO updatePermission(String targetUid, PermissionDTO patch, UserDetails ud) {
         requireAdmin(ud);
         PermissionEntity e = permissionRepository.findByUid(targetUid)
                 .orElseThrow(() -> new IllegalArgumentException("대상 사용자를 찾을 수 없습니다."));
-        e.setCanCreate(patch.isCanCreate());
-        e.setCanEdit(patch.isCanEdit());
-        e.setCanTrash(patch.isCanTrash());
-        e.setCanDelete(patch.isCanDelete());
-        // 접근 허용 여부 반영 (관리자 명시 승인)
-        boolean approve = patch.isAccessAllowed();
+        // null 이 들어와도 안전하게 처리 (Boolean.TRUE.equals)
+        e.setCanCreate(Boolean.TRUE.equals(patch.getCanCreate()));
+        e.setCanEdit(Boolean.TRUE.equals(patch.getCanEdit()));
+        e.setCanTrash(Boolean.TRUE.equals(patch.getCanTrash()));
+        e.setCanDelete(Boolean.TRUE.equals(patch.getCanDelete()));
+        boolean approve = Boolean.TRUE.equals(patch.getAccessAllowed());
         e.setAdminApproved(approve);
         e.setAccessAllowed(approve);
         e.setRequestStatus(approve ? "APPROVED" : "REJECTED");
         e.setDecidedAt(LocalDateTime.now());
         e = permissionRepository.save(e);
-        return PermissionDTO.raw(e, isAdminName(e.getName()), isBootstrap(e.getName()));
+        boolean adm = isAdminUid(e.getUid());
+        return PermissionDTO.raw(e, adm, adm);
     }
 
     // ===== 관리자: 접근 요청 승인/거절 =====
@@ -176,11 +168,12 @@ public class PermissionService {
         e.setAccessAllowed(approve);
         e.setRequestStatus(approve ? "APPROVED" : "REJECTED");
         e.setDecidedAt(LocalDateTime.now());
-        if (!approve) { // 거절 시 세부 권한도 회수
+        if (!approve) {
             e.setCanCreate(false); e.setCanEdit(false); e.setCanTrash(false); e.setCanDelete(false);
         }
         e = permissionRepository.save(e);
-        return PermissionDTO.raw(e, isAdminName(e.getName()), isBootstrap(e.getName()));
+        boolean adm = isAdminUid(e.getUid());
+        return PermissionDTO.raw(e, adm, adm);
     }
 
     private void requireAdmin(UserDetails ud) {

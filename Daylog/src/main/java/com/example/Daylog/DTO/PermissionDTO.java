@@ -19,13 +19,14 @@ public class PermissionDTO {
     private String email;
     private String provider;
     private String profileURL;
-    private boolean accessAllowed;
-    private boolean canCreate;   // 생성 권한
-    private boolean canEdit;     // 수정 권한
-    private boolean canTrash;    // 휴지통 이동/복원 권한
-    private boolean canDelete;   // 영구 삭제 권한
-    private boolean admin;       // 관리자(name '송성민') 여부
-    private boolean bootstrap;   // 부트스트랩 상시 허용(송성민/강미르) 여부 → 관리자 UI 토글 잠금용
+    // [smsong] Boolean(래퍼)로 변경 → PUT 시 JSON null 이 들어와도 파싱 에러 없이 허용
+    private Boolean accessAllowed;
+    private Boolean canCreate;   // 생성 권한
+    private Boolean canEdit;     // 수정 권한
+    private Boolean canTrash;    // 휴지통 이동/복원 권한
+    private Boolean canDelete;   // 영구 삭제 권한
+    private Boolean admin;       // 관리자 여부
+    private Boolean bootstrap;   // 상시 허용(관리자) 여부 → 관리자 UI 토글 잠금용
     private String requestStatus;
     private LocalDateTime requestedAt;
     private LocalDateTime decidedAt;

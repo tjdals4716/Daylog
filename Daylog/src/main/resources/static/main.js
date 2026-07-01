@@ -130,12 +130,14 @@ async function handleResponse(res) {
 }
 
 // ==========================================
-// 1-b. 사용자 이름 기반 접근 권한 (송성민 / 강미르 전용)
+// 1-b. 사용자 uid 기반 접근 권한 (관리자 uid '3635939452' 만 상시 접근, 그 외는 관리자 승인)
 // ==========================================
-const AUTH_NAMES = ['송성민', '강미르']; // [smsong] 's s' 제거 — 접근 차단 (관리자 승인 필요)
-const ME_ALIAS = ['송성민', 's s'];             // '나'(송성민)로 취급할 이름
+const ADMIN_UID = '3635939452';                 // [smsong] 관리자 = 유일 상시 접근 uid (이름 하드코딩 제거)
+const COUPLE_A_UID = '3635939452';              // [smsong] 프로필 고정: A(관리자)
+const COUPLE_B_UID = '4958158544';              // [smsong] 프로필 고정: B
+const ME_ALIAS = ['송성민', 's s'];             // (표시용) '송성민'으로 정규화할 이름
 
-// 여러 소스(localStorage / JWT)에서 로그인 사용자 name 을 최대한 확보
+// 여러 소스(localStorage / JWT)에서 로그인 사용자 name 을 최대한 확보 (표시용)
 function readLocalName() {
     try {
         const cu = JSON.parse(localStorage.getItem('currentUser') || 'null');
@@ -153,14 +155,12 @@ function readLocalName() {
     return '';
 }
 
-// true=허용, false=차단, null=이름 모름(서버 조회 필요)
-function isAuthorizedName(name) {
-    if (!name || !String(name).trim()) return null;
-    const n = String(name).trim().toLowerCase();
-    return AUTH_NAMES.map(s => s.toLowerCase()).includes(n);
+// 현재 로그인 uid 가 관리자(3635939452)인지 (로컬 판정 · 서버 실패 시 폴백용)
+function isAdminUidLocal() {
+    try { return String(getUid() || '').trim() === ADMIN_UID; } catch (_) { return false; }
 }
 
-// 표시용 정규화: 송성민/s s -> '송성민', 그 외 허용 사용자 -> '강미르'
+// 표시용 정규화: 송성민/s s -> '송성민', 그 외 -> '강미르'
 function normalizeDisplayName(name) {
     const n = String(name || '').trim().toLowerCase();
     if (ME_ALIAS.map(s => s.toLowerCase()).includes(n)) return '송성민';
@@ -282,8 +282,7 @@ if (Daylog) Daylog.applyPermButtons = applyPermButtons;
 // [B] edit by smsong - 권한 로딩 / 관리자 권한 메뉴 / 접근 요청
 function applyMyPermUI() {
     var p = (Daylog && Daylog.myPerm) ? Daylog.myPerm : null;
-    var nm = (typeof readLocalName === 'function') ? String(readLocalName() || '').trim() : '';
-    var admin = (p && p.admin) || nm === '송성민'; // 서버 권한 또는 로컬 이름(관리자)으로 표시
+    var admin = (p && p.admin) || isAdminUidLocal(); // 서버 권한 또는 로컬 uid(관리자 3635939452)로 표시
     var btn = document.getElementById('btn-perm-admin');
     if (btn) btn.style.display = admin ? '' : 'none';
     applyPermButtons(); // 생성 FAB 표시/차단 반영
@@ -303,16 +302,16 @@ function loadMyPermission() {
             return p;
         })
         .catch(function () {
-            // 서버 조회 실패 시: 로컬 이름 기준 폴백 (송성민=관리자 전권 / 강미르=전권, 그 외 접근 차단)
-            var nm = (typeof readLocalName === 'function') ? String(readLocalName() || '').trim() : '';
-            if (nm === '송성민' || nm === '강미르') {
-                Daylog.myPerm = { admin: nm === '송성민', bootstrap: true, accessAllowed: true,
+            // 서버 조회 실패 시: 관리자 uid(3635939452)만 로컬 폴백으로 전권 허용, 그 외는 접근 차단
+            if (isAdminUidLocal()) {
+                Daylog.myPerm = { admin: true, bootstrap: true, accessAllowed: true,
                                   canCreate: true, canEdit: true, canTrash: true, canDelete: true };
+                applyMyPermUI();
             } else {
                 Daylog.myPerm = null;
+                applyMyPermUI();
+                blockUnauthorizedUser(); // 관리자 아니고 서버 확인 불가 → 차단
             }
-            applyMyPermUI();
-            if (typeof isAuthorizedName === 'function' && isAuthorizedName(nm) === false) blockUnauthorizedUser();
             return null;
         });
 }
@@ -428,7 +427,7 @@ function togglePerm(uid, key) {
     var p = (Daylog._permList || []).find(function (x) { return x.uid === uid; });
     if (!p || p.admin) return;
     if (!p.accessAllowed) { showToast('먼저 접근을 허용해 주십시오'); return; }
-    var patch = { accessAllowed: p.accessAllowed, canCreate: p.canCreate, canEdit: p.canEdit, canTrash: p.canTrash, canDelete: p.canDelete };
+    var patch = { accessAllowed: !!p.accessAllowed, canCreate: !!p.canCreate, canEdit: !!p.canEdit, canTrash: !!p.canTrash, canDelete: !!p.canDelete };
     patch[key] = !p[key];
     putPermission(uid, patch);
 }
@@ -2252,9 +2251,18 @@ document.addEventListener('DOMContentLoaded', () => {
             .then(users => {
                 const list = users || [];
                 console.log('[Daylog] /user/all 응답:', list);
-                // 로그인한 본인 = '나', 나머지 = '상대방' (uid 기준으로 확실히 구분)
-                meUser = list.find(u => u.uid === currentUid) || null;
-                partnerUser = list.find(u => u.uid !== currentUid) || null;
+                // [smsong] 프로필 표시를 uid 기준으로 고정
+                //  A(3635939452) 로그인 → 나=A, 상대방=B / B(4958158544) 로그인 → 나=B, 상대방=A
+                //  그 외 유저 → 나=A, 상대방=B 로 고정 (본인 프로필 노출 안 함)
+                const _findU = (uid) => list.find(u => u.uid === uid) || null;
+                const _isCouple = (currentUid === COUPLE_A_UID || currentUid === COUPLE_B_UID);
+                if (currentUid === COUPLE_B_UID) {
+                    meUser = _findU(COUPLE_B_UID); partnerUser = _findU(COUPLE_A_UID);
+                } else if (currentUid === COUPLE_A_UID) {
+                    meUser = _findU(COUPLE_A_UID); partnerUser = _findU(COUPLE_B_UID);
+                } else {
+                    meUser = _findU(COUPLE_A_UID); partnerUser = _findU(COUPLE_B_UID);
+                }
                 currentUser = meUser;
 
                 // [smsong] 접근 권한은 서버(권한 메뉴/DB) 기준 — loadMyPermission 이 게이트 처리
@@ -2272,8 +2280,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 const sig = _listSig(list);
                 if (sig !== _profSig) {
                     _profSig = sig;
-                    renderProfileBox('me', meUser, icon('user',34), '나');
-                    renderProfileBox('partner', partnerUser, icon('user',34), '상대방');
+                    renderProfileBox('me', meUser, icon('user',34), _isCouple ? '나' : '');
+                    renderProfileBox('partner', partnerUser, icon('user',34), _isCouple ? '상대방' : '');
                 }
                 profilesLoaded = true;
                 updateProfileStats(); // 숫자만 갱신(저비용, 깜빡임 없음)
