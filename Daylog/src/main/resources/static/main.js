@@ -3103,7 +3103,7 @@ let _detailMemory = null;
 
 // =====================================================
 // [smsong] 상세보기 바텀시트 (REMS 방식 이식)
-//  스냅: full(완전히 위) → two(2/3) → one(1/3) → closed(완전히 아래=닫힘)
+//  스냅: full(완전히 위) → one(1/3) → closed(완전히 아래=닫힘)
 //  드래그 영역: 핸들 + 헤더 / 본문(.sheet-body)은 자유 스크롤
 // =====================================================
 function createDetailSheet(modalId, onClosed) {
@@ -3121,7 +3121,6 @@ function createDetailSheet(modalId, onClosed) {
         const a = A(), h = H();
         return {
             full: 0,                                    // 완전히 위
-            two:  Math.max(0, Math.round(h - a * 0.66)),// 2/3 노출
             one:  Math.max(0, Math.round(h - a * 0.34)),// 1/3 노출
             closed: Math.round(h + 40)                  // 완전히 아래(숨김)
         };
@@ -3186,12 +3185,12 @@ function createDetailSheet(modalId, onClosed) {
         dragging = false; document.body.style.userSelect = '';
         const m = metrics(), pos = curPx(), TH = 0.55;
         let target;
-        if (vel > TH) {          // 아래로 플릭 → 한 단계 내림 (1/3에서 더 내리면 닫힘)
-            target = current === 'full' ? 'two' : (current === 'two' ? 'one' : 'closed');
-        } else if (vel < -TH) {  // 위로 플릭 → 한 단계 올림
-            target = current === 'one' ? 'two' : 'full';
-        } else {                 // 천천히 놓으면 가장 가까운 스냅
-            const cand = ['full', 'two', 'one', 'closed'];
+        if (vel > TH) {          // 아래로 플릭 → 한 단계 내림 (완전히 위→1/3, 그 아래는 닫힘)
+            target = current === 'full' ? 'one' : 'closed';
+        } else if (vel < -TH) {  // 위로 플릭 → 완전히 위로
+            target = 'full';
+        } else {                 // 천천히 놓으면 가장 가까운 스냅 (2/3 지점 제거)
+            const cand = ['full', 'one', 'closed'];
             target = cand.reduce((a, b) => Math.abs(m[b] - pos) < Math.abs(m[a] - pos) ? b : a, cand[0]);
         }
         snap(target, true);
