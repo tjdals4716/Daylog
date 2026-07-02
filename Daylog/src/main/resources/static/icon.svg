@@ -28,27 +28,22 @@
   </g>
   <!-- 좌측 제본 띠 -->
   <rect x="150" y="120" width="34" height="272" rx="16" fill="#b08968"/>
-  <circle cx="167" cy="168" r="5.5" fill="#fbf4ea"/>
-  <circle cx="167" cy="208" r="5.5" fill="#fbf4ea"/>
-  <circle cx="167" cy="248" r="5.5" fill="#fbf4ea"/>
-  <circle cx="167" cy="288" r="5.5" fill="#fbf4ea"/>
-  <circle cx="167" cy="328" r="5.5" fill="#fbf4ea"/>
+  <circle cx="167" cy="160" r="5.5" fill="#fbf4ea"/>
+  <circle cx="167" cy="196" r="5.5" fill="#fbf4ea"/>
+  <circle cx="167" cy="232" r="5.5" fill="#fbf4ea"/>
+  <circle cx="167" cy="268" r="5.5" fill="#fbf4ea"/>
+  <circle cx="167" cy="304" r="5.5" fill="#fbf4ea"/>
+  <circle cx="167" cy="340" r="5.5" fill="#fbf4ea"/>
 
-  <!-- 본문 라인 (기록) -->
+  <!-- 본문 라인 (기록) — 하트 제거 후 줄 추가 -->
   <g stroke="#e6ccb2" stroke-width="10" stroke-linecap="round">
-    <line x1="210" y1="178" x2="332" y2="178"/>
-    <line x1="210" y1="212" x2="332" y2="212"/>
-    <line x1="210" y1="246" x2="300" y2="246"/>
+    <line x1="210" y1="170" x2="332" y2="170"/>
+    <line x1="210" y1="204" x2="332" y2="204"/>
+    <line x1="210" y1="238" x2="300" y2="238"/>
+    <line x1="210" y1="272" x2="332" y2="272"/>
+    <line x1="210" y1="306" x2="326" y2="306"/>
+    <line x1="210" y1="340" x2="292" y2="340"/>
   </g>
-
-  <!-- 마음(하트) — 기록의 중심 -->
-  <path d="M256 360
-           c-26 -20 -52 -38 -52 -66
-           a30 30 0 0 1 52 -20
-           a30 30 0 0 1 52 20
-           c0 28 -26 46 -52 66 z"
-        fill="#c1462f"/>
-  <path d="M256 360 c-26 -20 -52 -38 -52 -66" fill="none" stroke="#a83828" stroke-width="2" opacity="0.25"/>
 
   <!-- 책갈피 리본 -->
   <path d="M312 120 h34 v72 l-17 -14 -17 14 z" fill="#9c6644"/>
