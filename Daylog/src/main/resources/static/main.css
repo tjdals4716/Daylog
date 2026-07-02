@@ -1913,9 +1913,13 @@ body.picking .bottom-nav {
    [smsong] 상세보기 = 네이버 지도식 바텀시트 (REMS 방식 이식)
    드래그 스냅: 완전히 위(full) → 2/3(two) → 1/3(one) → 완전히 아래(closed)
    ========================================================= */
+/* [smsong] REMS처럼: 딤(어두운 배경) 없이 뒤 화면(지도/메뉴)을 그대로 보고 조작 가능
+   → 오버레이는 이벤트 통과(pointer-events:none), 시트만 이벤트 수신(auto) */
 .modal.detail-sheet {
     align-items: flex-end; justify-content: center; padding: 0;
-    animation: backdropIn 0.28s ease;
+    background: transparent;          /* 딤 제거 */
+    pointer-events: none;             /* 뒤 화면 클릭/스크롤/줌 통과 */
+    animation: none;
 }
 .detail-sheet .detail-content {
     width: 100%; max-width: 480px; margin: 0 auto;
@@ -1929,16 +1933,30 @@ body.picking .bottom-nav {
     will-change: transform;
     -webkit-backface-visibility: hidden; backface-visibility: hidden;
     text-align: left;
+    pointer-events: auto;                                  /* 시트는 조작 가능 */
+    box-shadow: 0 -10px 34px rgba(40, 37, 34, 0.22);       /* 딤 없이도 시트 구분 */
 }
-/* 드래그 핸들 (상단 바) */
+/* 드래그 핸들 (상단 바 + 힌트) — 사용자가 드래그 가능함을 명확히 인지하도록 */
 .detail-sheet .sheet-handle {
-    flex-shrink: 0; display: flex; justify-content: center; padding: 12px;
-    cursor: grab; touch-action: none;
+    flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 4px;
+    padding: 10px 12px 8px; cursor: grab; touch-action: none;
+}
+.detail-sheet .sheet-handle::before {
+    content: ''; width: 46px; height: 5px; border-radius: 3px; background: var(--gray-400);
+    transition: background 0.2s, transform 0.2s;
 }
 .detail-sheet .sheet-handle::after {
-    content: ''; width: 40px; height: 4px; border-radius: 2px; background: var(--gray-300);
+    content: '위·아래로 드래그 · 내려서 닫기';
+    font-size: 0.66rem; color: var(--gray-400); letter-spacing: -0.02em; line-height: 1;
 }
 .detail-sheet .sheet-handle:active { cursor: grabbing; }
+.detail-sheet .sheet-handle:active::before { background: var(--gray-500, #857d73); transform: scaleX(1.08); }
+/* 열릴 때 한 번 튕겨 드래그 가능함을 알림(유한 반복 → 지속 깜빡임 없음) */
+.detail-sheet .sheet-handle.hinting::before { animation: sheetHandleHint 0.9s ease 2; }
+@keyframes sheetHandleHint {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(4px); }
+}
 /* 헤더도 드래그 영역 (고정) */
 .detail-sheet .detail-modal-header {
     flex-shrink: 0; margin-bottom: 0; padding: 0 20px 12px;

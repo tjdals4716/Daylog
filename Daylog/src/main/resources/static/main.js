@@ -3153,6 +3153,13 @@ function createDetailSheet(modalId, onClosed) {
         apply(metrics().closed, false);   // 아래에서 시작
         void content.offsetHeight;        // reflow → 진입 애니메이션 보장
         requestAnimationFrame(() => snap(target, true));
+        // [smsong] 드래그 가능 힌트: 핸들을 잠깐 튕김(유한)
+        if (handle) {
+            handle.classList.remove('hinting');
+            void handle.offsetWidth;
+            handle.classList.add('hinting');
+            setTimeout(() => handle.classList.remove('hinting'), 2000);
+        }
     }
     function close() { snap('closed', true); }
 
