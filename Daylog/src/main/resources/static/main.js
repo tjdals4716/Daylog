@@ -761,6 +761,9 @@ document.addEventListener('DOMContentLoaded', () => {
             item.classList.add('active');
             const targetTab = item.getAttribute('data-tab');
             if (!targetTab) return;
+            // [smsong] 상세보기가 열려 있으면 메뉴 전환 시 자동으로 내려감(닫기)
+            if (_memorySheet && _memorySheet.isOpen()) closeDetailModal();
+            if (_clSheet && _clSheet.isOpen()) closeChecklistDetail();
             document.body.setAttribute('data-active-tab', targetTab);
             tabContents.forEach(tab => {
                 tab.style.display = (tab.id === targetTab) ? 'block' : 'none';
