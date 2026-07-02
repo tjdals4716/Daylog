@@ -648,6 +648,9 @@ input[type="date"]::-webkit-date-and-time-value {
     box-shadow: var(--shadow-sm); border: 2px solid var(--primary-light);
     position: relative; transition: transform 0.2s var(--ease-spring);
     animation: markerDrop 0.45s var(--ease-spring);
+    /* [smsong] 줌/재배치 시 이미지·그림자 리페인트 대신 GPU 텍스처로 이동 → 사진 마커 줌 속도 개선 */
+    will-change: transform;
+    -webkit-backface-visibility: hidden; backface-visibility: hidden;
 }
 .custom-marker:hover { transform: translateY(-3px) scale(1.06); z-index: 10; }
 .custom-marker img { width: 46px; height: 46px; border-radius: 5px; object-fit: cover; display: block; }
@@ -656,7 +659,7 @@ input[type="date"]::-webkit-date-and-time-value {
     border-width: 6px 6px 0; border-style: solid;
     border-color: var(--primary-light) transparent transparent transparent;
 }
-.marker-heart { font-size: 26px; filter: drop-shadow(0 2px 3px rgba(0,0,0,0.2)); animation: markerDrop 0.45s var(--ease-spring); }
+.marker-heart { font-size: 26px; filter: drop-shadow(0 2px 3px rgba(0,0,0,0.2)); animation: markerDrop 0.45s var(--ease-spring); will-change: transform; -webkit-backface-visibility: hidden; backface-visibility: hidden; }
 @keyframes markerDrop {
     0%   { opacity: 0; transform: translateY(-14px) scale(0.6); }
     100% { opacity: 1; transform: translateY(0) scale(1); }
@@ -1835,7 +1838,8 @@ body.picking .bottom-nav {
 }
 @keyframes loSpin { to { transform: rotate(360deg); } }
 .lo-text { font-size: 0.86rem; color: var(--gray-600, #6b6157); font-weight: 600; }
-/* [E] edit by smsong */
+/* [E] edit by smsong */
+
 
 /* [B] edit by smsong - 권한 설정 버튼 + 관리자 권한 메뉴 + 차단화면 요청 버튼 */
 .perm-menu-btn {
