@@ -2263,7 +2263,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 } else {
                     meUser = _findU(COUPLE_A_UID); partnerUser = _findU(COUPLE_B_UID);
                 }
-                currentUser = meUser;
+                // [smsong] 표시(meUser/partnerUser)는 위처럼 고정하되,
+                //  프로필 '수정' 대상(currentUser)은 항상 실제 로그인된 유저로 설정
+                currentUser = _findU(currentUid) || meUser;
 
                 // [smsong] 접근 권한은 서버(권한 메뉴/DB) 기준 — loadMyPermission 이 게이트 처리
 
