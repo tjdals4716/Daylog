@@ -1838,7 +1838,8 @@ body.picking .bottom-nav {
 }
 @keyframes loSpin { to { transform: rotate(360deg); } }
 .lo-text { font-size: 0.86rem; color: var(--gray-600, #6b6157); font-weight: 600; }
-/* [E] edit by smsong */
+/* [E] edit by smsong */
+
 
 /* [B] edit by smsong - 권한 설정 버튼 + 관리자 권한 메뉴 + 차단화면 요청 버튼 */
 .perm-menu-btn {
@@ -1920,6 +1921,7 @@ body.picking .bottom-nav {
     background: transparent;          /* 딤 제거 */
     pointer-events: none;             /* 뒤 화면 클릭/스크롤/줌 통과 */
     animation: none;
+    z-index: 90;                      /* [smsong] 상단바·하단 네비(z:100)보다 아래 → 메뉴가 시트 위에 항상 보임(REMS 방식) */
 }
 .detail-sheet .detail-content {
     width: 100%; max-width: 480px; margin: 0 auto;
@@ -1965,5 +1967,7 @@ body.picking .bottom-nav {
 /* 본문 스크롤 영역 */
 .detail-sheet .sheet-body {
     flex: 1 1 auto; overflow-y: auto; -webkit-overflow-scrolling: touch;
-    overscroll-behavior: contain; padding: 16px 20px 40px;
+    overscroll-behavior: contain;
+    /* [smsong] 하단 네비가 시트 위에 겹쳐 보이므로, 마지막 내용이 네비에 가리지 않도록 여백 확보 */
+    padding: 16px 20px calc(var(--bottom-nav-height) + env(safe-area-inset-bottom) + 28px);
 }
